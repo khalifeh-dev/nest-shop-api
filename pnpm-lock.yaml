@@ -77,6 +77,9 @@ importers:
       passport-jwt:
         specifier: ^4.0.1
         version: 4.0.1
+      pg:
+        specifier: ^8.22.0
+        version: 8.22.0
       puppeteer:
         specifier: ^25.3.0
         version: 25.3.0

@@ -43,6 +43,7 @@
     "multer": "^2.2.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "pg": "^8.22.0",
     "puppeteer": "^25.3.0",
     "redis": "^6.1.0",
     "reflect-metadata": "^0.2.2",
