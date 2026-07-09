@@ -2,7 +2,9 @@ import { NestFactory } from '@nestjs/core';
 import { VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import cookieParser from "cookie-parser"
+import { SwaggerModule } from "@nestjs/swagger"
 import { AppModule } from './app.module';
+import swaggerConfig from "./configs/swagger.config.js"
 
 (async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -34,9 +36,13 @@ import { AppModule } from './app.module';
     maxAge: 3600
   })
 
+  const document = SwaggerModule.createDocument(app, swaggerConfig)
+  SwaggerModule.setup("/api/v1/docs", app, document)
+
   const appPort = configService.get("APP_PORT", 9001)
 
   await app.listen(appPort, () => {
-    console.log(`🚀 Application is running on: http://localhost:${ appPort }/api/v1`)
+    console.log(`🚀 Application Is Running On: http://localhost:${ appPort }/api/v1`)
+    console.log(`📄 Application Documentation On http://localhost:${ appPort }/api/v1/docs`)
   });
 })()
