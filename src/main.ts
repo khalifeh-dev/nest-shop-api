@@ -6,11 +6,13 @@ import { SwaggerModule } from "@nestjs/swagger"
 import { AppModule } from './app.module';
 import swaggerConfig from "./configs/swagger.config.js"
 import { TransformInterceptor } from './common/interceptors/transform/transform.interceptor';
+import { TransformFilter } from './common/filters/transform/transform.filter';
 
 (async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.useGlobalPipes(new ValidationPipe());
+  app.useGlobalFilters(new TransformFilter())
   app.useGlobalInterceptors(new TransformInterceptor())
 
   const configService = app.get(ConfigService)
