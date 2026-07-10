@@ -96,7 +96,7 @@ export class TransformFilter<T> implements ExceptionFilter {
     P2022: 'Field Does Not Exist',
     P2023: 'Invalid Value Provided',
     P2024: 'Database Connection Timeout',
-    P2025: 'Record Not Dound',
+    P2025: 'Record Not Found',
     P2026: 'Unsupported Database Provider',
     P2027: 'Database Connection Error',
     P2028: 'Database Transaction Error',

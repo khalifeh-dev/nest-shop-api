@@ -30,7 +30,7 @@ describe('EncryptionService', () => {
       const hash1 = await service.hashPassword(password);
       const hash2 = await service.hashPassword(password);
       
-      expect(hash1).not.toEqual(hash2); // چون salt متفاوت
+      expect(hash1).not.toEqual(hash2);
     });
   });
 
