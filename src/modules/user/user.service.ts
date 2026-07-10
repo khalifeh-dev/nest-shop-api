@@ -28,9 +28,7 @@ export class UserService {
       });
 
       if (isUserExist)
-        throw new ConflictException(
-          `User Already Exists With Email ❌.`,
-        );
+        throw new ConflictException(`User Already Exists With Email ❌.`);
 
       const { firstName, lastName, email, password } = dto;
       const hashPassword = await this.encryption.hashPassword(password);
@@ -141,8 +139,7 @@ export class UserService {
         where: { email },
       });
 
-      if (!user)
-        throw new NotFoundException(`User Not Found With Email ❌.`);
+      if (!user) throw new NotFoundException(`User Not Found With Email ❌.`);
 
       return this.sanitizeUser(user);
     } catch (error) {
@@ -152,7 +149,14 @@ export class UserService {
   }
 
   private sanitizeUser(user: User): SanitizeUser {
-    const { password, createdAt, updatedAt, ...sanitizedUser } = user;
+    const {
+      password,
+      createdAt,
+      updatedAt,
+      sellerInfo,
+      sellerVerified,
+      ...sanitizedUser
+    } = user;
     return sanitizedUser;
   }
 }

@@ -5,7 +5,6 @@ export type SanitizeUser = Omit<
   | 'password'
   | 'createdAt'
   | 'updatedAt'
-  | 'refreshTokens'
   | 'sellerInfo'
   | 'sellerVerified'
 >;
