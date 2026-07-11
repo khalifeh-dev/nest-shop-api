@@ -44,6 +44,7 @@ model User {
   sellerVerified Boolean @default(false)
 
   refreshTokens RefreshToken[]
+  images        UserImage[]
 }
 
 
@@ -79,4 +80,28 @@ model RefreshToken {
   @@index([expiresAt])
   @@index([isRevoked])
   @@map("refresh_tokens")
+}
+
+//? <----------------------- User Image ----------------------->
+model UserImage {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  url         String 
+  publicId    String   @map("public_id") 
+  
+  isActive    Boolean  @default(true) @map("is_active")
+  
+  title       String? 
+  size        Int?   
+  mimeType    String?  @map("mime_type")
+  width       Int?
+  height      Int?
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@index([userId])
+  @@map("user_images")
 }
