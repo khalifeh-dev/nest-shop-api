@@ -9,12 +9,17 @@ import {
   HttpStatus,
   HttpCode,
   Query,
+  UseInterceptors,
+  UploadedFile,
+  Request
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiQuery,
@@ -22,6 +27,7 @@ import {
 } from '@nestjs/swagger';
 import { Pagination } from '../../common/types/pagination.type';
 import { SanitizeUser } from '../../common/types/user.type';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -92,5 +98,44 @@ export class UserController {
   @HttpCode(HttpStatus.OK)
   public async remove(@Param('id') id: string): Promise<SanitizeUser> {
     return await this.userService.remove(id);
+  }
+
+  @Post('upload_avatar')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ 
+    summary: 'Upload user avatar',
+    description: 'Upload a new avatar image for the current user',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @HttpCode(HttpStatus.CREATED)
+  public async uploadAvatar(  
+    @Request() req, 
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    req.user = { id: "cmrewdsc20000d8v3clokr3ak" }
+    return await this.userService.uploadAvatar(file, req?.user.id)
+  }
+
+  @Delete("remove_avatar")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove user avatar' })
+  public async removeAvatar (@Request() req) {
+    req.user = { id: "cmrewdsc20000d8v3clokr3ak" }
+    return this.userService.removeAvatar(req.user.id);
+  }
+
+  @Get('user_images')
+  @ApiOperation({ summary: 'Get all user images' })
+  @HttpCode(HttpStatus.OK)
+  public async getUserImages(@Request() req) {
+    return this.userService.getUserImages(req.user.id);
   }
 }

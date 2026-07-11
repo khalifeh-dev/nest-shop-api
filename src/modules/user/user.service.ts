@@ -13,12 +13,14 @@ import { EncryptionService } from '../../common/services/encryption/encryption.s
 import { FindAll } from '../../common/types/find-all.type';
 import { pick } from 'lodash';
 import { SanitizeUser } from '../../common/types/user.type';
+import { CloudinaryService } from '../../common/services/cloudinary/cloudinary.service';
 
 @Injectable()
 export class UserService {
   constructor(
     private prisma: DatabaseService,
     private encryption: EncryptionService,
+    private cloudinaryService: CloudinaryService,
   ) {}
 
   public async create(dto: CreateUserDto): Promise<SanitizeUser> {
@@ -158,5 +160,90 @@ export class UserService {
       ...sanitizedUser
     } = user;
     return sanitizedUser;
+  }
+
+  public async uploadAvatar(file: Express.Multer.File, userId: string) {
+    const uploadResult = await this.cloudinaryService.uploadAvatar(
+      file,
+      userId,
+    );
+
+    const userImages = await this.prisma.master.userImage.create({
+      data: {
+        userId,
+        url: uploadResult.secure_url,
+        publicId: uploadResult.public_id,
+        isActive: true,
+        mimeType: file.mimetype,
+        size: file.size,
+      },
+    });
+
+    const updateUserAvatar = await this.prisma.master.user.update({
+      where: { id: userId },
+      data: { avatar: uploadResult.secure_url },
+    });
+
+    return {
+      url: uploadResult.secure_url,
+      publicId: uploadResult.public_id,
+      imageId: userImages.id,
+    };
+  }
+
+  public async removeAvatar(userId: string) {
+    const user = await this.prisma.replica.user.findUnique({
+      where: { id: userId },
+      select: { avatar: true, id: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.avatar) {
+      throw new BadRequestException('User has no avatar');
+    }
+
+    const userImage = await this.prisma.master.userImage.findFirst({
+      where: {
+        userId,
+        url: user.avatar,
+        isActive: true,
+      },
+    });
+
+    if (userImage) {
+      await this.cloudinaryService.deleteFile(userImage.publicId);
+      await this.prisma.master.userImage.update({
+        where: { id: userImage.id },
+        data: { isActive: false },
+      });
+    }
+
+    return this.prisma.master.user.update({
+      where: { id: userId },
+      data: { avatar: null },
+    });
+  }
+
+  public async getUserImages(userId: string) {
+    return await this.prisma.replica.userImage.findMany({
+      where: {
+        userId,
+        isActive: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      select: {
+        id: true,
+        url: true,
+        publicId: true,
+        createdAt: true,
+        mimeType: true,
+        size: true,
+      },
+    });
   }
 }

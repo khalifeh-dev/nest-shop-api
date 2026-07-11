@@ -13,5 +13,14 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @IsString()
   @Length(0, 512)
   @Transform(({ value }) => value?.trim())
-  bio;
+  bio?;
+
+  @ApiProperty({
+    type: 'string',
+    format: 'binary',
+    description: 'User avatar image file (jpg, png, webp)',
+    required: false,
+  })
+  @IsOptional()
+  avatar?;
 }

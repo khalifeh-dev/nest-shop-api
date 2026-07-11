@@ -5,6 +5,7 @@ import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './common/database/database.module';
 import { EncryptionModule } from './common/services/encryption/encryption.module';
 import { UserModule } from './modules/user/user.module';
+import { CloudinaryModule } from './common/services/cloudinary/cloudinary.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { UserModule } from './modules/user/user.module';
     DatabaseModule,
     EncryptionModule,
     UserModule,
+    CloudinaryModule,
 
   ],
   controllers: [AppController],
