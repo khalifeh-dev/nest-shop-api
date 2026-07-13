@@ -33,7 +33,7 @@ export class UserService {
         throw new ConflictException(`User Already Exists With Email ❌.`);
 
       const { firstName, lastName, email, password } = dto;
-      const hashPassword = await this.encryption.hashPassword(password);
+      const hashPassword = await this.encryption.hash(password);
 
       const createUser = await this.prisma.master.user.create({
         data: { firstName, lastName, email, password: hashPassword },

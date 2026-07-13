@@ -1,17 +1,12 @@
-export enum User_Role {
-  Owner = 'OWNER',
-  Admin = 'ADMIN',
-  Moderator = 'MODERATOR',
-  Seller = 'SELLER',
-  User = 'USER',
-}
+import { Roles } from "@prisma/client"
 
 export interface JWTPayload {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
-  role?: User_Role;
+  userName: string
+  role?: Roles;
 }
 
 export interface UserDataSummary {
@@ -19,5 +14,6 @@ export interface UserDataSummary {
   email: string;
   firstName: string;
   lastName: string;
-  role?: User_Role;
+  userName: string
+  role?: Roles;
 }

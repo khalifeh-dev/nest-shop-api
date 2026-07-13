@@ -14,8 +14,8 @@ export interface Argon2Options {
 
 @Injectable()
 export class EncryptionService {
-  public async hashPassword(
-    password: string,
+  public async hash(
+    value: string,
     options: Argon2Options = {},
   ): Promise<string> {
     try {
@@ -35,24 +35,24 @@ export class EncryptionService {
         Object.entries(mergedOptions).filter(([_, v]) => v !== undefined),
       );
 
-      return await argon2.hash(password, cleanOptions);
+      return await argon2.hash(value, cleanOptions);
     } catch (error) {
       const errorMessage = ErrorUtil.getMessage(error);
-      console.log(`❌ Error(hashPassword): ${errorMessage} ❌`);
-      throw new BadRequestException(`Error In Hashing Password ❌.`);
+      console.log(`❌ Error(Hashing): ${errorMessage} ❌`);
+      throw new BadRequestException(`Error In Hashing ❌.`);
     }
   }
 
-  public async verifyPassword(
-    hashedPassword: string,
-    plainPassword: string,
+  public async verifyHash(
+    hashedValue: string,
+    plainValue: string,
   ): Promise<boolean> {
     try {
-      return await argon2.verify(hashedPassword, plainPassword);
+      return await argon2.verify(hashedValue, plainValue);
     } catch (error) {
       const errorMessage = ErrorUtil.getMessage(error);
-      console.log(`❌ Error(hashPassword): ${errorMessage} ❌`);
-      throw new BadRequestException(`Error In Hashing Password ❌.`);
+      console.log(`❌ Error(Hashing): ${errorMessage} ❌`);
+      throw new BadRequestException(`Error In Hashing ❌.`);
     }
   }
 }

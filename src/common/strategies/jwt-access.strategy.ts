@@ -5,7 +5,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { JWTPayload, UserDataSummary } from '../types/jwt.type';
 
 @Injectable()
-export class JwtAccessStrategy extends PassportStrategy(Strategy) {
+export class JwtAccessStrategy extends PassportStrategy(Strategy, 'jwt-access') {
   constructor(configService: ConfigService) {
     const accessTokenSecretKey = configService.get<string>('JWT_ACCESS_SECRET_KEY');
     if (!accessTokenSecretKey)
@@ -23,8 +23,9 @@ export class JwtAccessStrategy extends PassportStrategy(Strategy) {
     firstName,
     lastName,
     email,
-    role,
+    userName,
+    role
   }: JWTPayload): Promise<UserDataSummary> {
-    return { sub: id, firstName, lastName, email, role };
+    return { sub: id, firstName, lastName, email, userName, role };
   }
 }
