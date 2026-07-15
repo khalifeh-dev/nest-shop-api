@@ -246,4 +246,15 @@ export class UserService {
       },
     });
   }
+
+  public async updateRefreshToken(userId: string, refreshTokenId: string) {
+    await this.findOne(userId);
+
+    const updateToken = await this.prisma.master.user.update({
+      where: { id: userId },
+      data: { refreshTokens: { connect: { id: refreshTokenId } } },
+    });
+
+    return this.sanitizeUser(updateToken);
+  }
 }

@@ -68,7 +68,7 @@ export class RefreshTokenService {
 
     return await this.prisma.master.refreshToken.create({
       data: {
-        token: hashedToken,
+        token: newToken,
         userId,
         deviceId,
         deviceInfo: deviceInfo.deviceName,

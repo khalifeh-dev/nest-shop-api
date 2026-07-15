@@ -7,11 +7,13 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtAccessStrategy } from '../../common/strategies/jwt-access.strategy';
 import { JwtRefreshStrategy } from '../../common/strategies/jwt.refresh.strategy';
+import { RefreshTokenModule } from '../refresh-token/refresh-token.module';
 
 
 @Module({
   imports: [
     UserModule,
+    RefreshTokenModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
