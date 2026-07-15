@@ -22,17 +22,14 @@ export class RefreshTokenService {
     private userService: UserService,
   ) {}
 
-  public async createRefreshToken(
-    userId: string,
-    deviceInfo: DeviceInfo,
-  ) {
+  public async createRefreshToken(userId: string, deviceInfo: DeviceInfo) {
     const maxTokensPerDevice =
       this.configService.get<number>('MAX_TOKENS_PER_DEVICE') || 3;
-    const deviceId = await this.generateDeviceId(deviceInfo);
+    const deviceId = this.generateDeviceId(deviceInfo);
 
     const existingTokens = await this.prisma.replica.refreshToken.findMany({
       where: { userId, deviceId, isRevoked: false },
-      orderBy: { lastUsedAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
 
     if (existingTokens.length >= maxTokensPerDevice) {
@@ -93,8 +90,8 @@ export class RefreshTokenService {
 
     return {
       token: newToken,
-      id: token.id
-    }
+      id: token.id,
+    };
   }
 
   public async revokeToken(userId: string, deviceId: string) {
@@ -182,8 +179,10 @@ export class RefreshTokenService {
     }
   }
 
-  private async generateDeviceId(info: DeviceInfo): Promise<string> {
-    const id = `${info.userAgent}-${info.ip}`;
-    return await this.encryption.hash(id);
+  private generateDeviceId(info: DeviceInfo): string {
+    const deviceName = info.deviceName || 'Unknown';
+    const browser = info.userAgent?.split('/')[0]?.trim() || 'Unknown';
+
+    return `${deviceName}-${browser}`;
   }
 }
