@@ -66,6 +66,8 @@ export class UserService {
             avatar: true,
             bio: true,
             userName: true,
+            lastLoginAt: true,
+            userStatus: true
           },
         }),
         this.prisma.replica.user.count(),
@@ -135,7 +137,7 @@ export class UserService {
     }
   }
 
-  public async findOneByEmail(email: string): Promise<SanitizeUser> {
+  public async findOneByEmail(email: string): Promise<User> {
     try {
       const user = await this.prisma.replica.user.findUnique({
         where: { email },
@@ -143,7 +145,7 @@ export class UserService {
 
       if (!user) throw new NotFoundException(`User Not Found With Email ❌.`);
 
-      return this.sanitizeUser(user);
+      return user;
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException('Internal Server Error ❌.');

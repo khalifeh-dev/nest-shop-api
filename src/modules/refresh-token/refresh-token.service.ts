@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { DatabaseService } from '../../common/database/database.service';
 import { DeviceInfo } from '../../common/types/device-info.type';
-import { RefreshToken } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import { EncryptionService } from '../../common/services/encryption/encryption.service';
 import { UserService } from '../user/user.service';
@@ -26,7 +25,7 @@ export class RefreshTokenService {
   public async createRefreshToken(
     userId: string,
     deviceInfo: DeviceInfo,
-  ): Promise<RefreshToken> {
+  ) {
     const maxTokensPerDevice =
       this.configService.get<number>('MAX_TOKENS_PER_DEVICE') || 3;
     const deviceId = await this.generateDeviceId(deviceInfo);
@@ -43,6 +42,19 @@ export class RefreshTokenService {
         data: { isRevoked: true },
       });
     }
+
+    await this.prisma.master.refreshToken.updateMany({
+      where: {
+        userId,
+        expiresAt: { lt: new Date() },
+        isRevoked: false,
+      },
+      data: {
+        isRevoked: true,
+        revokedAt: new Date(),
+        revokedReason: 'TOKEN_EXPIRED',
+      },
+    });
 
     const user = await this.prisma.replica.user.findUnique({
       where: { id: userId },
@@ -66,9 +78,9 @@ export class RefreshTokenService {
 
     const hashedToken = await this.encryption.hash(newToken);
 
-    return await this.prisma.master.refreshToken.create({
+    const token = await this.prisma.master.refreshToken.create({
       data: {
-        token: newToken,
+        token: hashedToken,
         userId,
         deviceId,
         deviceInfo: deviceInfo.deviceName,
@@ -78,6 +90,11 @@ export class RefreshTokenService {
         expiresAt: new Date(Date.now() + 604_800_000), // 7 * 24 * 60 * 60 * 1000 -> 7D
       },
     });
+
+    return {
+      token: newToken,
+      id: token.id
+    }
   }
 
   public async revokeToken(userId: string, deviceId: string) {
@@ -134,7 +151,7 @@ export class RefreshTokenService {
 
   public async revokeTokenById(tokenId: string) {
     try {
-      await this.findOneToken(tokenId)
+      await this.findOneToken(tokenId);
 
       return await this.prisma.master.refreshToken.update({
         where: { id: tokenId },
@@ -158,7 +175,7 @@ export class RefreshTokenService {
 
       if (!token) throw new NotFoundException('Token Not Found.');
 
-      return token
+      return token;
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException('Error In Revoke Token.');

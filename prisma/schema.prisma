@@ -32,6 +32,12 @@ enum Roles {
   MODERATOR
 }
 
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BANNED
+}
+
 //! <----------------------------------------<< Moldes >>---------------------------------------->
 
 //? <----------------------- User ----------------------->
@@ -44,12 +50,15 @@ model User {
   password  String
   avatar    String?
   bio       String?
+  userStatus UserStatus @default(ACTIVE) @map("user_status")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   sellerInfo  Json?
   sellerVerified Boolean @default(false)
+
+  lastLoginAt   DateTime?
 
   refreshTokens RefreshToken[]
   images        UserImage[]

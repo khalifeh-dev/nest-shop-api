@@ -8,13 +8,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtAccessStrategy } from '../../common/strategies/jwt-access.strategy';
 import { JwtRefreshStrategy } from '../../common/strategies/jwt.refresh.strategy';
 import { RefreshTokenModule } from '../refresh-token/refresh-token.module';
-
+import { EncryptionModule } from '../../common/services/encryption/encryption.module';
 
 @Module({
   imports: [
     UserModule,
     RefreshTokenModule,
     PassportModule,
+    EncryptionModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -25,10 +26,6 @@ import { RefreshTokenModule } from '../refresh-token/refresh-token.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [
-    AuthService,
-    JwtAccessStrategy,
-    JwtRefreshStrategy
-  ],
+  providers: [AuthService, JwtAccessStrategy, JwtRefreshStrategy],
 })
 export class AuthModule {}
