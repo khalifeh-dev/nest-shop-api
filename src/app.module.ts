@@ -8,6 +8,9 @@ import { UserModule } from './modules/user/user.module';
 import { CloudinaryModule } from './common/services/cloudinary/cloudinary.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RefreshTokenModule } from './modules/refresh-token/refresh-token.module';
+import { ThrottlerModule } from "@nestjs/throttler"
+import { Redis } from "ioredis"
+import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis"
 
 @Module({
   imports: [
@@ -16,6 +19,27 @@ import { RefreshTokenModule } from './modules/refresh-token/refresh-token.module
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+    }),
+
+    ThrottlerModule.forRoot({
+      storage: new ThrottlerStorageRedisService(
+        new Redis({
+          host: 'localhost',
+          port: 6379,
+        }),
+      ),
+      throttlers: [
+        {
+          name: 'default',
+          ttl: 60_000,
+          limit: 60,
+        },
+        {
+          name: 'auth',
+          ttl: 60_000, 
+          limit: 10,
+        },
+      ],
     }),
 
     // Modules
