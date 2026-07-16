@@ -1,4 +1,7 @@
 export enum LogOut {
-    logOut = "DEVICE_LOGOUT", // Log Out From 1 Device
-    userLogOut = "USER_LOGOUT" // Log Out From All Device
+  USER_LOGOUT = 'USER_LOGOUT',
+  DEVICE_LOGOUT = 'DEVICE_LOGOUT',
+  ALL_DEVICES_LOGOUT = 'ALL_DEVICES_LOGOUT',
+  TOKEN_EXPIRED = 'TOKEN_EXPIRED',
+  TOKEN_LIMIT_EXCEEDED = 'TOKEN_LIMIT_EXCEEDED',
 }

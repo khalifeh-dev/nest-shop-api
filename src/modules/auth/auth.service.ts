@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { DatabaseService } from '../../common/database/database.service';
@@ -13,6 +14,7 @@ import { RefreshToken, UserStatus } from '@prisma/client';
 import { SignInDto } from './dto/sign-in.dto';
 import { EncryptionService } from '../../common/services/encryption/encryption.service';
 import { DeviceDto } from './dto/device.dto';
+import { LogOut } from '../../common/constants/auth.constant';
 
 @Injectable()
 export class AuthService {
@@ -48,13 +50,12 @@ export class AuthService {
 
     const { userAgent, ip, deviceName, deviceType } = dto;
 
-    const refreshToken =
-      await this.refreshTokenService.createRefreshToken(id, {
-        userAgent,
-        ip,
-        deviceName,
-        deviceType,
-      });
+    const refreshToken = await this.refreshTokenService.createRefreshToken(id, {
+      userAgent,
+      ip,
+      deviceName,
+      deviceType,
+    });
 
     const updateUser = await this.userService.updateRefreshToken(
       id,
@@ -88,7 +89,7 @@ export class AuthService {
       findUser?.password,
       dto.password,
     );
-    
+
     if (!checkPassowrd)
       throw new BadRequestException('Email Or Password Is Wrong .');
 
@@ -104,13 +105,12 @@ export class AuthService {
 
     const { userAgent, ip, deviceName, deviceType } = dto;
 
-    const refreshToken =
-      await this.refreshTokenService.createRefreshToken(id, {
-        userAgent,
-        ip,
-        deviceName,
-        deviceType,
-      });
+    const refreshToken = await this.refreshTokenService.createRefreshToken(id, {
+      userAgent,
+      ip,
+      deviceName,
+      deviceType,
+    });
 
     const updateUser = await this.userService.updateRefreshToken(
       id,
@@ -128,6 +128,112 @@ export class AuthService {
         accessToken,
         refreshToken: refreshToken.token,
       },
+    };
+  }
+
+  public async signOut(userId: string, deviceId?: string) {
+    let tokenInfo = { deviceInfo: 'Unknown' };
+
+    if (deviceId) {
+      const token = await this.prisma.master.refreshToken.findFirst({
+        where: {
+          userId,
+          deviceId,
+          isRevoked: false,
+        },
+        select: {
+          deviceInfo: true,
+          id: true,
+        },
+      });
+
+      if (token) {
+        await this.prisma.master.refreshToken.update({
+          where: { id: token.id },
+          data: {
+            isRevoked: true,
+            revokedAt: new Date(),
+            revokedReason: LogOut.USER_LOGOUT,
+          },
+        });
+        tokenInfo.deviceInfo = token.deviceInfo || 'Unknown';
+      }
+    }
+
+    if (!deviceId) {
+      const token = await this.prisma.master.refreshToken.findFirst({
+        where: {
+          userId,
+          isRevoked: false,
+        },
+        orderBy: { lastUsedAt: 'desc' },
+        select: {
+          deviceInfo: true,
+          id: true,
+        },
+      });
+
+      if (token) {
+        await this.prisma.master.refreshToken.update({
+          where: { id: token.id },
+          data: {
+            isRevoked: true,
+            revokedAt: new Date(),
+            revokedReason: LogOut.USER_LOGOUT,
+          },
+        });
+        tokenInfo.deviceInfo = token.deviceInfo || 'Unknown';
+      }
+    }
+
+    return tokenInfo;
+  }
+
+  public async signOutAll(userId: string) {
+    const result = await this.prisma.master.refreshToken.updateMany({
+      where: {
+        userId,
+        isRevoked: false,
+      },
+      data: {
+        isRevoked: true,
+        revokedAt: new Date(),
+        revokedReason: LogOut.ALL_DEVICES_LOGOUT,
+      },
+    });
+
+    return { count: result.count, message: 'Logged out successfully' };
+  }
+
+  public async signOutDevice(userId: string, deviceId?: string) {
+    const token = await this.prisma.master.refreshToken.findFirst({
+      where: {
+        userId,
+        deviceId,
+        isRevoked: false,
+      },
+      select: {
+        deviceInfo: true,
+        id: true,
+      },
+    });
+
+    if (!token) {
+      throw new NotFoundException('Device Not Found Or Already Logged Out');
+    }
+
+    await this.prisma.master.refreshToken.update({
+      where: { id: token.id },
+      data: {
+        isRevoked: true,
+        revokedAt: new Date(),
+        revokedReason: LogOut.DEVICE_LOGOUT,
+      },
+    });
+
+    return {
+      deviceInfo: token.deviceInfo || 'Unknown',
+      message: 'Logged out successfully',
     };
   }
 }
