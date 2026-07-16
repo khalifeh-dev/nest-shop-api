@@ -106,15 +106,28 @@ export class RefreshTokenService {
         data: {
           isRevoked: true,
           revokedAt: new Date(),
-          revokedReason: LogOut.logOut,
+          revokedReason: LogOut.USER_LOGOUT,
         },
       });
 
       if (result.count === 0)
         throw new NotFoundException('No Active Token Found For This Device.');
 
+      const token = await this.prisma.replica.refreshToken.findFirst({
+        where: {
+          userId,
+          deviceId,
+          isRevoked: true,
+        },
+        orderBy: { revokedAt: 'desc' },
+        select: {
+          deviceInfo: true,
+        },
+      });
+
       return {
         message: 'Token Revoked Successfully.',
+        deviceInfo: token?.deviceInfo || 'Unknown',
         count: result.count,
       };
     } catch (error) {
@@ -132,7 +145,7 @@ export class RefreshTokenService {
         data: {
           isRevoked: true,
           revokedAt: new Date(),
-          revokedReason: LogOut.userLogOut,
+          revokedReason: LogOut.USER_LOGOUT,
         },
       });
 
@@ -155,7 +168,7 @@ export class RefreshTokenService {
         data: {
           isRevoked: true,
           revokedAt: new Date(),
-          revokedReason: 'MANUAL_REVOKE',
+          revokedReason: LogOut.DEVICE_LOGOUT,
         },
       });
     } catch (error) {
@@ -179,7 +192,7 @@ export class RefreshTokenService {
     }
   }
 
-  private generateDeviceId(info: DeviceInfo): string {
+  public generateDeviceId(info: DeviceInfo): string {
     const deviceName = info.deviceName || 'Unknown';
     const browser = info.userAgent?.split('/')[0]?.trim() || 'Unknown';
 

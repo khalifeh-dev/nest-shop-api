@@ -27,7 +27,7 @@ export class AuthService {
     private encryption: EncryptionService,
   ) {}
 
-  public async signUp(dto: DeviceDto) {
+  public async signUp(dto: SignUpDto & DeviceDto) {
     const userData = {
       firstName: dto.firstName,
       lastName: dto.lastName,
@@ -76,7 +76,7 @@ export class AuthService {
     };
   }
 
-  public async signIn(dto: DeviceDto) {
+  public async signIn(dto: SignInDto) {
     const findUser = await this.userService.findOneByEmail(dto.email);
 
     if (findUser.userStatus !== UserStatus.ACTIVE) {
@@ -132,86 +132,16 @@ export class AuthService {
   }
 
   public async signOut(userId: string, deviceId?: string) {
-    let tokenInfo = { deviceInfo: 'Unknown' };
-
     if (deviceId) {
-      const token = await this.prisma.master.refreshToken.findFirst({
-        where: {
-          userId,
-          deviceId,
-          isRevoked: false,
-        },
-        select: {
-          deviceInfo: true,
-          id: true,
-        },
-      });
-
-      if (token) {
-        await this.prisma.master.refreshToken.update({
-          where: { id: token.id },
-          data: {
-            isRevoked: true,
-            revokedAt: new Date(),
-            revokedReason: LogOut.USER_LOGOUT,
-          },
-        });
-        tokenInfo.deviceInfo = token.deviceInfo || 'Unknown';
-      }
+      return await this.refreshTokenService.revokeToken(userId, deviceId);
     }
 
-    if (!deviceId) {
-      const token = await this.prisma.master.refreshToken.findFirst({
-        where: {
-          userId,
-          isRevoked: false,
-        },
-        orderBy: { lastUsedAt: 'desc' },
-        select: {
-          deviceInfo: true,
-          id: true,
-        },
-      });
-
-      if (token) {
-        await this.prisma.master.refreshToken.update({
-          where: { id: token.id },
-          data: {
-            isRevoked: true,
-            revokedAt: new Date(),
-            revokedReason: LogOut.USER_LOGOUT,
-          },
-        });
-        tokenInfo.deviceInfo = token.deviceInfo || 'Unknown';
-      }
-    }
-
-    return tokenInfo;
-  }
-
-  public async signOutAll(userId: string) {
-    const result = await this.prisma.master.refreshToken.updateMany({
-      where: {
-        userId,
-        isRevoked: false,
-      },
-      data: {
-        isRevoked: true,
-        revokedAt: new Date(),
-        revokedReason: LogOut.ALL_DEVICES_LOGOUT,
-      },
-    });
-
-    return { count: result.count, message: 'Logged out successfully' };
-  }
-
-  public async signOutDevice(userId: string, deviceId?: string) {
     const token = await this.prisma.master.refreshToken.findFirst({
       where: {
         userId,
-        deviceId,
         isRevoked: false,
       },
+      orderBy: { lastUsedAt: 'desc' },
       select: {
         deviceInfo: true,
         id: true,
@@ -219,7 +149,7 @@ export class AuthService {
     });
 
     if (!token) {
-      throw new NotFoundException('Device Not Found Or Already Logged Out');
+      throw new NotFoundException('No active token found for this user');
     }
 
     await this.prisma.master.refreshToken.update({
@@ -227,13 +157,118 @@ export class AuthService {
       data: {
         isRevoked: true,
         revokedAt: new Date(),
-        revokedReason: LogOut.DEVICE_LOGOUT,
+        revokedReason: LogOut.USER_LOGOUT,
       },
     });
 
     return {
-      deviceInfo: token.deviceInfo || 'Unknown',
       message: 'Logged out successfully',
+      deviceInfo: token.deviceInfo || 'Unknown',
+    };
+  }
+
+  public async signOutAll(userId: string) {
+    await this.userService.findOne(userId);
+    return await this.refreshTokenService.revokeAllTokensByDevice(userId);
+  }
+
+  public async signOutDevice(userId: string, deviceId?: string) {
+    if (!deviceId) throw new BadRequestException('Device ID is required');
+
+    return await this.refreshTokenService.revokeToken(userId, deviceId);
+  }
+
+  public async refresh(
+    providedRefreshToken: string,
+    deviceDto: DeviceDto,
+  ) {
+    let payload;
+    const deviceId = this.refreshTokenService.generateDeviceId(deviceDto)
+
+    try {
+      payload = this.jwtService.verify(providedRefreshToken, {
+        secret: this.configService.get('JWT_REFRESH_SECRET_KEY'),
+      });
+    } catch (error) {
+      throw new UnauthorizedException('Invalid refresh token.');
+    }
+
+    const userId = payload?.sub;
+    const user = await this.userService.findOne(userId);
+
+    const hashedToken = await this.encryption.hash(providedRefreshToken);
+
+    const existingToken = await this.prisma.replica.refreshToken.findFirst({
+      where: {
+        userId,
+        token: hashedToken,
+        isRevoked: false,
+        expiresAt: { gt: new Date() },
+        ...(deviceId && { deviceId }),
+      },
+      select: {
+        id: true,
+        deviceId: true,
+        deviceInfo: true,
+      },
+    });
+
+    if (!existingToken)
+      throw new UnauthorizedException(
+        'Refresh token not found or already revoked',
+      );
+
+    const result = await this.prisma.transaction(async (prisma) => {
+      await prisma.refreshToken.update({
+        where: { id: existingToken.id },
+        data: {
+          isRevoked: true,
+          revokedAt: new Date(),
+          revokedReason: 'TOKEN_REFRESHED',
+        },
+      });
+
+      await prisma.refreshToken.updateMany({
+        where: {
+          userId,
+          expiresAt: { lt: new Date() },
+          isRevoked: false,
+        },
+        data: {
+          isRevoked: true,
+          revokedAt: new Date(),
+          revokedReason: 'TOKEN_EXPIRED',
+        },
+      });
+
+      const newRefreshToken = await this.refreshTokenService.createRefreshToken(
+        userId,
+        deviceDto,
+      );
+
+      await this.userService.updateRefreshToken(userId, newRefreshToken.id);
+
+      return newRefreshToken;
+    });
+
+    const accessPayload = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      userName: user.userName,
+      // role: user?.role,
+    };
+
+    const newAccessToken = this.jwtService.sign(accessPayload, {
+      secret: this.configService.get('JWT_ACCESS_SECRET_KEY'),
+      expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION') || '15m',
+    });
+
+    return {
+      user,
+      accessToken: newAccessToken,
+      refreshToken: result.token,
     };
   }
 }

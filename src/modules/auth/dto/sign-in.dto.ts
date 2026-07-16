@@ -1,8 +1,10 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsEmail, IsNotEmpty, IsString, Length } from 'class-validator';
+import { DeviceDto } from './device.dto';
 
-export class SignInDto {
+export class SignInDto extends PartialType(DeviceDto) {
   @ApiProperty({ example: 'owner@example.com', description: 'Owner Email' })
   @IsNotEmpty()
   @IsString()

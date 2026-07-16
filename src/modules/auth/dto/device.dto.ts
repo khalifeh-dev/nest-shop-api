@@ -1,10 +1,7 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { IsNotEmpty, IsString, Length } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { SignInDto } from './sign-in.dto';
-import { SignUpDto } from './sign-up.dto';
 
-export class DeviceDto extends PartialType(SignInDto && SignUpDto) {
+export class DeviceDto {
   @IsNotEmpty()
   @IsString()
   @Transform(({ value }) => value?.trim())

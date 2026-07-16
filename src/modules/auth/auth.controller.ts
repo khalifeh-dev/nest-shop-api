@@ -6,6 +6,7 @@ import {
   Post,
   Req,
   Res,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
@@ -29,15 +30,8 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { userAgent, ip, deviceName, deviceType } =
-      DeviceUtil.extractDeviceInfo(req);
 
-    const clientData: DeviceInfo = {
-      userAgent,
-      ip,
-      deviceName,
-      deviceType,
-    };
+    const clientData: DeviceInfo = DeviceUtil.extractDeviceInfo(req);
 
     const { user, tokens } = await this.authService.signUp({
       ...dto,
@@ -47,8 +41,9 @@ export class AuthController {
     this.setAuthCookies(res, tokens);
 
     return {
-      user,
-    };
+      user, 
+      accessToken: tokens.accessToken
+    }
   }
 
   @Post('sign-in')
@@ -59,15 +54,8 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { userAgent, ip, deviceName, deviceType } =
-      DeviceUtil.extractDeviceInfo(req);
 
-    const clientData: DeviceInfo = {
-      userAgent,
-      ip,
-      deviceName,
-      deviceType,
-    };
+    const clientData: DeviceInfo = DeviceUtil.extractDeviceInfo(req);
 
     const { user, tokens } = await this.authService.signIn({
       ...dto,
@@ -77,8 +65,9 @@ export class AuthController {
     this.setAuthCookies(res, tokens);
 
     return {
-      user,
-    };
+      user, 
+      accessToken: tokens.accessToken
+    }
   }
 
   @Post('sign-out')
@@ -123,6 +112,27 @@ export class AuthController {
     this.clearAuthCookies(res);
 
     return result;
+  }
+
+  @Post('refresh')
+  @ApiOperation({ summary: 'refresh access token' })
+  @HttpCode(HttpStatus.OK)
+  public async refreshToken (@Req() req: Request, @Res() res: Response) {
+
+    const clientData: DeviceInfo = DeviceUtil.extractDeviceInfo(req);
+
+    const refreshToken = req.cookies["refresh-token"]
+    if (!refreshToken) throw new UnauthorizedException("Refresh token missing.")
+    
+    const { user, ...tokens } = await this.authService.refresh(refreshToken, clientData)
+
+    this.setAuthCookies(res, tokens);
+
+    return {
+      user, 
+      accessToken: tokens.accessToken
+    }
+
   }
 
   private clearAuthCookies(res: Response) {
