@@ -8,9 +8,10 @@ import { UserModule } from './modules/user/user.module';
 import { CloudinaryModule } from './common/services/cloudinary/cloudinary.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RefreshTokenModule } from './modules/refresh-token/refresh-token.module';
-import { ThrottlerModule } from "@nestjs/throttler"
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
 import { Redis } from "ioredis"
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis"
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -52,6 +53,12 @@ import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis"
 
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

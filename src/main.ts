@@ -12,9 +12,6 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 (async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
-  const throttlerGuard = app.get(ThrottlerGuard);
-
-  app.useGlobalGuards(throttlerGuard);
   app.useGlobalInterceptors(new TransformInterceptor());
   app.useGlobalFilters(new TransformFilter());
   app.useGlobalPipes(
