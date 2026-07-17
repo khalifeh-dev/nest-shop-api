@@ -62,6 +62,7 @@ model User {
 
   refreshTokens RefreshToken[]
   images        UserImage[]
+  verifyCodes        verifyCode[]
 }
 
 
@@ -121,4 +122,25 @@ model UserImage {
   
   @@index([userId])
   @@map("user_images")
+}
+
+//? <----------------------- Verify Code ----------------------->
+model verifyCode {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  code      String 
+  expiresAt DateTime @map("expires_at")
+  
+  isUsed    Boolean  @default(false) @map("is_used")
+  usedAt    DateTime? @map("used_at")
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  @@index([userId])
+  @@index([code])
+  @@index([expiresAt])
+  @@map("verify_code")
 }

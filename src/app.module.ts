@@ -13,6 +13,7 @@ import { Redis } from "ioredis"
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis"
 import { APP_GUARD } from '@nestjs/core';
 import { EmailModule } from './common/services/email/email.module';
+import { VerifyCodeModule } from './common/services/verify-code/verify-code.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { EmailModule } from './common/services/email/email.module';
     AuthModule,
     RefreshTokenModule,
     EmailModule,
+    VerifyCodeModule,
 
   ],
   controllers: [AppController],

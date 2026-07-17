@@ -48,7 +48,7 @@ export class TemplateService {
         'src',
         'common',
         'services',
-        'emails',
+        'email',
         'templates',
       );
     } else {
@@ -58,7 +58,7 @@ export class TemplateService {
         'src',
         'common',
         'services',
-        'emails',
+        'email',
         'templates',
       );
     }

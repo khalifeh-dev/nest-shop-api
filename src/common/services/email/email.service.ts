@@ -17,50 +17,70 @@ export class EmailService {
     return this.provider.sendEmail(options);
   }
 
-  public async sendForgetPassword(
-    to: string,
-    subject: string = '🔐 Password Recovery',
-    name: string,
-    resetLink: string,
-    year: number,
-    companyName: string,
-    verifyCode: string[],
-    expiredTime: string,
-    resendLink: string
-  ) {
+  public async sendForgetPassword(data: {
+    to: string;
+    subject: string;
+    name: string;
+    year: number;
+    companyName: string;
+    verifyCode: string[];
+    expiredTime: string;
+    resendLink: string;
+  }) {
     const html = this.templateService.renderTemplate('forget-password', {
-      name,
-      resetLink,
-      year,
-      companyName,
-      verifyCode,
-      expiredTime,
-      resendLink
+      name: data.name,
+      year: data.year,
+      companyName: data.companyName,
+      verifyCode: data.verifyCode,
+      expiredTime: data.expiredTime,
+      resendLink: data.resendLink,
     });
 
     await this.sendEmail({
-      to,
-      subject,
+      to: data.to,
+      subject: data.subject,
       html,
     });
   }
 
-  public async sendWelcome(
-    to: string,
-    subject: string = '💖 Welcome To Your Website',
-    name: string,
-    year: number,
-    companyName: string,
-  ) {
+  public async sendWelcome(data: {
+    to: string;
+    subject: string;
+    name: string;
+    year: number;
+    companyName: string;
+  }) {
     const html = this.templateService.renderTemplate('welcome', {
-      name,
-      year,
-      companyName,
+      name: data.name,
+      year: data.year,
+      companyName: data.companyName,
     });
 
     await this.sendEmail({
-      to,
-      subject,
+      to: data.to,
+      subject: data.subject,
+      html,
+    });
+  }
+
+  public async sendPasswordChangedEmail(data: {
+    to: string;
+    fullname: string;
+    changedAt: string;
+    deviceInfo: string;
+    location: string;
+  }) {
+    const html = this.templateService.renderTemplate('password-changed', {
+      fullname: data.fullname,
+      email: data.to,
+      changedAt: data.changedAt,
+      deviceInfo: data.deviceInfo,
+      location: data.location,
+    });
+
+    await this.sendEmail({
+      to: data.to,
+      subject: '🔑 Change Password',
       html,
     });
   }

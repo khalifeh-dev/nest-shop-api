@@ -16,11 +16,18 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DeviceUtil } from '../../common/utils/device.util';
 import { SignInDto } from './dto/sign-in.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { VerifyCodeService } from '../../common/services/verify-code/verify-code.service';
+import { ForgetPasswordDto } from './dto/forget-password.dto';
+import { resetPasswordDto } from './dto/reset-password.dto';
+import { VerifyCodeDto } from './dto/verify-code.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private verifyCode: VerifyCodeService,
+  ) {}
 
   @Post('sign-up')
   @ApiOperation({ summary: 'Register a user' })
@@ -30,7 +37,6 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-
     const clientData: DeviceInfo = DeviceUtil.extractDeviceInfo(req);
 
     const { user, tokens } = await this.authService.signUp({
@@ -41,9 +47,9 @@ export class AuthController {
     this.setAuthCookies(res, tokens);
 
     return {
-      user, 
-      accessToken: tokens.accessToken
-    }
+      user,
+      accessToken: tokens.accessToken,
+    };
   }
 
   @Post('sign-in')
@@ -54,7 +60,6 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-
     const clientData: DeviceInfo = DeviceUtil.extractDeviceInfo(req);
 
     const { user, tokens } = await this.authService.signIn({
@@ -65,9 +70,9 @@ export class AuthController {
     this.setAuthCookies(res, tokens);
 
     return {
-      user, 
-      accessToken: tokens.accessToken
-    }
+      user,
+      accessToken: tokens.accessToken,
+    };
   }
 
   @Post('sign-out')
@@ -117,22 +122,54 @@ export class AuthController {
   @Post('refresh')
   @ApiOperation({ summary: 'refresh access token' })
   @HttpCode(HttpStatus.OK)
-  public async refreshToken (@Req() req: Request, @Res() res: Response) {
-
+  public async refreshToken(@Req() req: Request, @Res() res: Response) {
     const clientData: DeviceInfo = DeviceUtil.extractDeviceInfo(req);
 
-    const refreshToken = req.cookies["refresh-token"]
-    if (!refreshToken) throw new UnauthorizedException("Refresh token missing.")
-    
-    const { user, ...tokens } = await this.authService.refresh(refreshToken, clientData)
+    const refreshToken = req.cookies['refresh-token'];
+    if (!refreshToken)
+      throw new UnauthorizedException('Refresh token missing.');
+
+    const { user, ...tokens } = await this.authService.refresh(
+      refreshToken,
+      clientData,
+    );
 
     this.setAuthCookies(res, tokens);
 
     return {
-      user, 
-      accessToken: tokens.accessToken
-    }
+      user,
+      accessToken: tokens.accessToken,
+    };
+  }
 
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Request password reset' })
+  @HttpCode(HttpStatus.OK)
+  public async forgetPassword(@Body() dto: ForgetPasswordDto) {
+    return await this.verifyCode.sendVerifyCode(dto.email);
+  }
+
+  @Post('verify-reset-code')
+  @ApiOperation({ summary: 'Verify reset code' })
+  @HttpCode(HttpStatus.OK)
+  public async verifyResetCode(
+    @Body() dto: VerifyCodeDto,
+  ) {
+    return this.verifyCode.verifyCode(dto.email, dto.code);
+  }
+
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Reset password' })
+  @HttpCode(HttpStatus.OK)
+  public async resetPassword(
+    @Req() req: Request,
+    @Body() dto: resetPasswordDto,
+  ) {
+    const deviceInfo: DeviceInfo = DeviceUtil.extractDeviceInfo(req);
+    return this.verifyCode.resetPassword({
+      ...dto,
+      deviceInfo: deviceInfo.userAgent,
+    });
   }
 
   private clearAuthCookies(res: Response) {
