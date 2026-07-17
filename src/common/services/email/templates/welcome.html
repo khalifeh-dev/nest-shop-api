@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cyberpunk · Glassmorphism Welcome</title>
+  <!-- Font & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 30% 10%, #0b0e1a, #03050c);
+      font-family: 'Space Grotesk', sans-serif;
+      padding: 24px;
+    }
+
+    /* ----- GLASS MORPHISM + CYBERPUNK EMAIL CARD ----- */
+    .glass-cyber-email {
+      max-width: 680px;
+      width: 100%;
+      background: rgba(8, 20, 40, 0.25);
+      backdrop-filter: blur(14px) saturate(180%);
+      -webkit-backdrop-filter: blur(14px) saturate(180%);
+      border-radius: 48px 48px 48px 48px;
+      border: 1px solid rgba(0, 180, 255, 0.25);
+      box-shadow: 
+        0 20px 50px rgba(0, 0, 0, 0.8),
+        inset 0 0 60px rgba(0, 150, 255, 0.15),
+        0 0 0 1px rgba(0, 180, 255, 0.1);
+      padding: 36px 40px 44px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+
+    /* cyber grid overlay */
+    .glass-cyber-email::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: 
+        linear-gradient(rgba(0, 180, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 180, 255, 0.02) 1px, transparent 1px);
+      background-size: 28px 28px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* neon glow line (cyberpunk accent) */
+    .glass-cyber-email::after {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: 20%;
+      width: 60%;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, #00b4ff, #a0e0ff, #00b4ff, transparent);
+      filter: blur(2px);
+      opacity: 0.7;
+      border-radius: 100%;
+      z-index: 1;
+    }
+
+    /* all content above pseudo */
+    .email-content {
+      position: relative;
+      z-index: 2;
+    }
+
+    /* ----- HEADER / LOGO ----- */
+    .email-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 28px;
+      border-bottom: 1px solid rgba(0, 180, 255, 0.2);
+      padding-bottom: 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      font-size: 32px;
+      color: #00ccff;
+      filter: drop-shadow(0 0 12px #0099ff);
+      background: rgba(0, 180, 255, 0.08);
+      width: 56px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 20px;
+      border: 1px solid rgba(0, 200, 255, 0.3);
+      backdrop-filter: blur(4px);
+    }
+
+    .brand-text {
+      font-weight: 700;
+      font-size: 22px;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #b0eaff, #3d9eff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 0 20px rgba(0, 150, 255, 0.3);
+    }
+
+    .brand-text span {
+      font-weight: 400;
+      color: rgba(255, 255, 255, 0.5);
+      background: none;
+      -webkit-background-clip: unset;
+      background-clip: unset;
+      text-shadow: none;
+    }
+
+    .cyber-badge {
+      background: rgba(0, 180, 255, 0.08);
+      border: 1px solid rgba(0, 200, 255, 0.25);
+      border-radius: 60px;
+      padding: 6px 16px 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: #9bdaff;
+      backdrop-filter: blur(4px);
+    }
+
+    .cyber-badge i {
+      color: #00ccff;
+      font-size: 12px;
+    }
+
+    /* ----- MAIN GREETING ----- */
+    .greeting-block {
+      margin-bottom: 24px;
+    }
+
+    .greeting-title {
+      font-size: 42px;
+      font-weight: 700;
+      line-height: 1.1;
+      background: linear-gradient(135deg, #e0f2ff, #60b0ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 0 30px rgba(0, 140, 255, 0.2);
+      letter-spacing: -1px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .greeting-title i {
+      color: #00ccff;
+      font-size: 36px;
+      filter: drop-shadow(0 0 18px #0088ff);
+    }
+
+    .greeting-sub {
+      color: rgba(180, 220, 255, 0.7);
+      font-size: 18px;
+      font-weight: 400;
+      border-left: 3px solid #00a6ff;
+      padding-left: 18px;
+      margin-top: 6px;
+      letter-spacing: -0.2px;
+      backdrop-filter: blur(2px);
+    }
+
+    /* ----- USER CARD (GLASS) ----- */
+    .user-highlight {
+      background: rgba(0, 120, 255, 0.06);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border-radius: 28px;
+      border: 1px solid rgba(0, 180, 255, 0.15);
+      padding: 20px 24px;
+      margin: 20px 0 26px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+      box-shadow: inset 0 0 40px rgba(0, 100, 255, 0.05);
+    }
+
+    .avatar-cyber {
+      width: 64px;
+      height: 64px;
+      border-radius: 30px;
+      background: linear-gradient(145deg, #001d3d, #002855);
+      border: 1px solid #0088ff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      color: #80ccff;
+      box-shadow: 0 0 20px rgba(0, 100, 255, 0.3);
+      flex-shrink: 0;
+    }
+
+    .user-info {
+      flex: 1;
+    }
+
+    .user-info .name {
+      font-weight: 600;
+      font-size: 22px;
+      color: #d6ecff;
+      letter-spacing: -0.3px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .user-info .name i {
+      color: #00bbff;
+      font-size: 14px;
+      opacity: 0.8;
+    }
+
+    .user-info .handle {
+      font-size: 15px;
+      color: rgba(160, 200, 255, 0.5);
+      font-weight: 400;
+      margin-top: 2px;
+      letter-spacing: 0.3px;
+    }
+
+    .user-status {
+      background: rgba(0, 200, 255, 0.08);
+      border-radius: 40px;
+      padding: 4px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #8acbff;
+      border: 1px solid rgba(0, 180, 255, 0.2);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .user-status i {
+      color: #00ee89;
+      font-size: 10px;
+    }
+
+    /* ----- WELCOME MESSAGE ----- */
+    .welcome-message {
+      background: rgba(0, 80, 180, 0.05);
+      backdrop-filter: blur(4px);
+      border-radius: 24px;
+      padding: 18px 24px;
+      margin: 18px 0 24px;
+      border-left: 3px solid #00a6ff;
+      border-right: 1px solid rgba(0, 180, 255, 0.05);
+    }
+
+    .welcome-message p {
+      color: rgba(210, 235, 255, 0.9);
+      font-size: 16px;
+      line-height: 1.6;
+      font-weight: 400;
+    }
+
+    .welcome-message strong {
+      color: #aad4ff;
+      font-weight: 600;
+    }
+
+    .welcome-message i {
+      color: #00ccff;
+      margin-right: 6px;
+    }
+
+    /* ----- FEATURE GRID (CYBER GLASS) ----- */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 28px 0 32px;
+    }
+
+    .feature-item {
+      background: rgba(0, 100, 200, 0.04);
+      backdrop-filter: blur(4px);
+      border: 1px solid rgba(0, 180, 255, 0.1);
+      border-radius: 24px;
+      padding: 16px 14px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      transition: all 0.2s;
+      box-shadow: inset 0 0 20px rgba(0, 100, 255, 0.02);
+    }
+
+    .feature-item i {
+      font-size: 26px;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 160, 255, 0.06);
+      border-radius: 18px;
+      color: #40bcff;
+      border: 1px solid rgba(0, 180, 255, 0.1);
+      flex-shrink: 0;
+    }
+
+    .feature-item .info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .feature-item .info .title {
+      font-weight: 600;
+      font-size: 15px;
+      color: #d0ecff;
+      letter-spacing: -0.2px;
+    }
+
+    .feature-item .info .desc {
+      font-size: 13px;
+      color: rgba(160, 200, 240, 0.5);
+      font-weight: 400;
+    }
+
+    /* ----- CTA BUTTON (CYBERPUNK) ----- */
+    .cta-wrapper {
+      display: flex;
+      justify-content: flex-start;
+      margin: 20px 0 28px;
+    }
+
+    .btn-cyber {
+      background: rgba(0, 140, 255, 0.08);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(0, 200, 255, 0.3);
+      border-radius: 60px;
+      padding: 14px 40px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600;
+      font-size: 17px;
+      color: #d0eeff;
+      display: inline-flex;
+      align-items: center;
+      gap: 16px;
+      text-decoration: none;
+      transition: all 0.25s ease;
+      letter-spacing: 0.3px;
+      box-shadow: 0 0 20px rgba(0, 120, 255, 0.1);
+      cursor: default;
+    }
+
+    .btn-cyber i {
+      color: #00ccff;
+      font-size: 18px;
+      transition: transform 0.2s;
+    }
+
+    .btn-cyber:hover {
+      background: rgba(0, 160, 255, 0.15);
+      border-color: #00a6ff;
+      box-shadow: 0 0 40px rgba(0, 150, 255, 0.2);
+      transform: scale(1.02);
+    }
+
+    .btn-cyber:hover i {
+      transform: translateX(6px);
+    }
+
+    /* ----- FOOTER (CYBER DETAILS) ----- */
+    .email-footer {
+      border-top: 1px solid rgba(0, 180, 255, 0.1);
+      padding-top: 24px;
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      color: rgba(160, 200, 255, 0.3);
+      font-size: 13px;
+      font-weight: 400;
+      letter-spacing: 0.2px;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 20px;
+    }
+
+    .footer-links a {
+      color: rgba(160, 200, 255, 0.4);
+      text-decoration: none;
+      transition: color 0.2s;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .footer-links a i {
+      font-size: 13px;
+      color: #0088ff;
+    }
+
+    .footer-links a:hover {
+      color: #80ccff;
+    }
+
+    .footer-tag {
+      color: rgba(0, 200, 255, 0.2);
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    .footer-tag i {
+      color: #00bbff;
+      margin-right: 6px;
+    }
+
+    /* responsive */
+    @media (max-width: 550px) {
+      .glass-cyber-email {
+        padding: 28px 18px 32px;
+        border-radius: 32px;
+      }
+      .greeting-title {
+        font-size: 30px;
+      }
+      .feature-grid {
+        grid-template-columns: 1fr;
+      }
+      .user-highlight {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .email-header {
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .btn-cyber {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="glass-cyber-email">
+    <div class="email-content">
+
+      <!-- HEADER -->
+      <div class="email-header">
+        <div class="brand">
+          <div class="brand-icon">
+            <i class="fas fa-microchip"></i>
+          </div>
+          <div class="brand-text">
+            NEON<span>SPACE</span>
+          </div>
+        </div>
+        <div class="cyber-badge">
+          <i class="fas fa-bolt"></i> v2.4 · secure
+        </div>
+      </div>
+
+      <!-- GREETING -->
+      <div class="greeting-block">
+        <div class="greeting-title">
+          <i class="fas fa-hand-peace"></i> Welcome back,
+        </div>
+        <div class="greeting-sub">
+          <i class="fas fa-chevron-right" style="color: #00bbff; margin-right: 8px;"></i> 
+          your neural interface is live
+        </div>
+      </div>
+
+      <!-- USER CARD (GLASS) -->
+      <div class="user-highlight">
+        <div class="avatar-cyber">
+          <i class="fas fa-user-astronaut"></i>
+        </div>
+        <div class="user-info">
+          <div class="name">
+            @neon_runner
+            <span class="user-status">
+              <i class="fas fa-circle"></i> online
+            </span>
+          </div>
+          <div class="handle">
+            <i class="fas fa-id-card" style="margin-right: 6px; color: #0088ff;"></i> 
+            ID: 0x7F3A · access level 4
+          </div>
+        </div>
+        <div style="margin-left: auto; color: #0088ff; opacity: 0.5; font-size: 22px;">
+          <i class="fas fa-qrcode"></i>
+        </div>
+      </div>
+
+      <!-- WELCOME MESSAGE -->
+      <div class="welcome-message">
+        <p>
+          <i class="fas fa-arrow-right" style="color: #00aaff;"></i> 
+          <strong>System ready.</strong> We’ve prepped your dashboard with live data streams, 
+          encrypted channels, and a fresh UI update. <br />
+          <span style="display: inline-block; margin-top: 8px; color: rgba(160,200,255,0.6);">
+            <i class="fas fa-shield-halved"></i> 2FA enabled · last login: 12 min ago
+          </span>
+        </p>
+      </div>
+
+      <!-- FEATURE GRID (CYBER GLASS) -->
+      <div class="feature-grid">
+        <div class="feature-item">
+          <i class="fas fa-satellite-dish"></i>
+          <div class="info">
+            <span class="title">Data nexus</span>
+            <span class="desc">real‑time sync</span>
+          </div>
+        </div>
+        <div class="feature-item">
+          <i class="fas fa-cube"></i>
+          <div class="info">
+            <span class="title">3D assets</span>
+            <span class="desc">23 items ready</span>
+          </div>
+        </div>
+        <div class="feature-item">
+          <i class="fas fa-bolt"></i>
+          <div class="info">
+            <span class="title">Neon speed</span>
+            <span class="desc">< 12ms latency</span>
+          </div>
+        </div>
+        <div class="feature-item">
+          <i class="fas fa-cloud-upload-alt"></i>
+          <div class="info">
+            <span class="title">Backup</span>
+            <span class="desc">encrypted · 2.4 TB</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="cta-wrapper">
+        <div class="btn-cyber">
+          <i class="fas fa-arrow-circle-right"></i> Enter the grid
+          <i class="fas fa-chevron-circle-right" style="font-size: 14px;"></i>
+        </div>
+      </div>
+
+      <!-- FOOTER -->
+      <div class="email-footer">
+        <div class="footer-links">
+          <a href="#"><i class="fas fa-cog"></i> preferences</a>
+          <a href="#"><i class="fas fa-lock"></i> security</a>
+          <a href="#"><i class="fas fa-headset"></i> support</a>
+        </div>
+        <div class="footer-tag">
+          <i class="fas fa-database"></i> 2026 · NEONSPACE
+        </div>
+      </div>
+
+    </div> <!-- /.email-content -->
+  </div> <!-- /.glass-cyber-email -->
+</body>
+</html>
