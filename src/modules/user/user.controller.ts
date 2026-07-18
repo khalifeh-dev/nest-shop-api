@@ -133,9 +133,23 @@ export class UserController {
   }
 
   @Get('user_images')
-  @ApiOperation({ summary: 'Get all user images' })
+  @ApiOperation({ summary: 'Get user all images' })
   @HttpCode(HttpStatus.OK)
   public async getUserImages(@Request() req) {
-    return this.userService.getUserImages(req.user.id);
+    return await this.userService.getUserImages(req.user.id);
+  }
+
+  @Get('user_devices')
+  @ApiOperation({ summary: 'Get user all devices' })
+  @HttpCode(HttpStatus.OK)
+  public async getUserDevices (@Request() req) {
+    return await this.userService.getUserDevices(req?.user.id)
+  }
+
+  @Get('user_devices/:deviceId')
+  @ApiOperation({ summary: 'Get all user images' })
+  @HttpCode(HttpStatus.OK)
+  public async getDevicesDetails (@Request() req, @Param("deviceId") deviceId: string) {
+    return await this.userService.getDeviceDetails(req?.user.id, deviceId)
   }
 }

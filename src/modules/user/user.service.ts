@@ -67,7 +67,7 @@ export class UserService {
             bio: true,
             userName: true,
             lastLoginAt: true,
-            userStatus: true
+            userStatus: true,
           },
         }),
         this.prisma.replica.user.count(),
@@ -258,5 +258,76 @@ export class UserService {
     });
 
     return this.sanitizeUser(updateToken);
+  }
+
+  public async getUserDevices(userId: string) {
+    await this.findOne(userId);
+
+    const now = new Date();
+
+    const devices = await this.prisma.replica.refreshToken.groupBy({
+      by: ['deviceId', 'deviceType', 'deviceInfo'],
+      where: {
+        userId: userId,
+        expiresAt: { gt: now },
+        isRevoked: false,
+        deviceId: { not: null },
+      },
+      _max: {
+        lastUsedAt: true,
+        ipAddress: true,
+        userAgent: true,
+        location: true,
+        createdAt: true,
+      },
+      _count: {
+        deviceId: true,
+      },
+      orderBy: {
+        _max: {
+          lastUsedAt: 'desc',
+        },
+      },
+    });
+
+    return devices.map((device) => ({
+      deviceId: device.deviceId,
+      deviceType: device.deviceType,
+      deviceInfo: device.deviceInfo,
+      lastUsedAt: device._max?.lastUsedAt,
+      ipAddress: device._max?.ipAddress,
+      userAgent: device._max?.userAgent,
+      location: device._max?.location,
+      firstSeen: device._max?.createdAt,
+      activeSessions: device._count?.deviceId || 0,
+    }));
+  }
+
+  public async getDeviceDetails(userId: string, deviceId: string) {
+    const token = await this.prisma.replica.refreshToken.findFirst({
+      where: {
+        userId: userId,
+        deviceId: deviceId,
+        isRevoked: false,
+      },
+      select: {
+        deviceId: true,
+        deviceType: true,
+        deviceInfo: true,
+        ipAddress: true,
+        userAgent: true,
+        location: true,
+        lastUsedAt: true,
+        createdAt: true,
+        expiresAt: true,
+      },
+    });
+
+    if (!token)
+      throw new NotFoundException(
+        'The specified device was not found or is inactive.',
+      );
+
+    return token;
   }
 }
