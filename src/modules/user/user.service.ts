@@ -14,7 +14,7 @@ import { FindAll } from '../../common/types/find-all.type';
 import { pick } from 'lodash';
 import { SanitizeUser } from '../../common/types/user.type';
 import { CloudinaryService } from '../../common/services/cloudinary/cloudinary.service';
-import { UserAction } from '../../common/constants/user.constant';
+import { UserAction, UserStatus } from '../../common/constants/user.constant';
 
 @Injectable()
 export class UserService {
@@ -366,5 +366,28 @@ export class UserService {
     });
 
     return this.sanitizeUser(updateUser);
+  }
+
+  public async inActiveUser(userId: string) {
+    await this.findOne(userId);
+
+    const updatedUser = await this.updateUserStatus(userId, UserStatus.In_Active)
+
+    return this.sanitizeUser(updatedUser);
+  }
+
+  public async banUser(userId: string) {
+    await this.findOne(userId);
+
+    const updatedUser = await this.updateUserStatus(userId, UserStatus.Banned)
+
+    return this.sanitizeUser(updatedUser);
+  }
+
+  private async updateUserStatus(userId: string, status: UserStatus) {
+    return await this.prisma.master.user.update({
+      where: { id: userId },
+      data: { userStatus: status },
+    });
   }
 }

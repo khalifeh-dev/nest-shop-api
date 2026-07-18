@@ -11,7 +11,7 @@ import {
   Query,
   UseInterceptors,
   UploadedFile,
-  Request
+  Request,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -104,7 +104,7 @@ export class UserController {
   @Post('upload_avatar')
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Upload user avatar',
     description: 'Upload a new avatar image for the current user',
   })
@@ -117,19 +117,19 @@ export class UserController {
     },
   })
   @HttpCode(HttpStatus.CREATED)
-  public async uploadAvatar(  
-    @Request() req, 
+  public async uploadAvatar(
+    @Request() req,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    req.user = { id: "cmrewdsc20000d8v3clokr3ak" }
-    return await this.userService.uploadAvatar(file, req?.user.id)
+    req.user = { id: 'cmrewdsc20000d8v3clokr3ak' };
+    return await this.userService.uploadAvatar(file, req?.user.id);
   }
 
-  @Delete("remove_avatar")
+  @Delete('remove_avatar')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove user avatar' })
-  public async removeAvatar (@Request() req) {
-    req.user = { id: "cmrewdsc20000d8v3clokr3ak" }
+  public async removeAvatar(@Request() req) {
+    req.user = { id: 'cmrewdsc20000d8v3clokr3ak' };
     return this.userService.removeAvatar(req.user.id);
   }
 
@@ -143,36 +143,58 @@ export class UserController {
   @Get('user_devices')
   @ApiOperation({ summary: 'Get user all devices' })
   @HttpCode(HttpStatus.OK)
-  public async getUserDevices (@Request() req) {
-    return await this.userService.getUserDevices(req?.user.id)
+  public async getUserDevices(@Request() req) {
+    return await this.userService.getUserDevices(req?.user.id);
   }
 
   @Get('user_devices/:deviceId')
   @ApiOperation({ summary: 'Get all user images' })
   @HttpCode(HttpStatus.OK)
-  public async getDevicesDetails (@Request() req, @Param("deviceId") deviceId: string) {
-    return await this.userService.getDeviceDetails(req?.user.id, deviceId)
+  public async getDevicesDetails(
+    @Request() req,
+    @Param('deviceId') deviceId: string,
+  ) {
+    return await this.userService.getDeviceDetails(req?.user.id, deviceId);
   }
 
-  @Delete("account/delete")
+  @Delete('account/delete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove user account' })
-  public async softDeleteMyAccount (@Request() req, @Body() reason?: string) {
-    return await this.userService.softDeleteUser(req?.user.id, reason)
+  public async softDeleteMyAccount(@Request() req, @Body() reason?: string) {
+    return await this.userService.softDeleteUser(req?.user.id, reason);
   }
 
-  @Delete("delete_account/:userId")
+  @Delete('user_account/delete/:userId')
   @ApiParam({ name: 'id', description: 'User ID', type: String })
   @ApiOperation({ summary: 'Remove user account by admin' })
   @HttpCode(HttpStatus.OK)
-  public async softDeleteByAdmin (@Param('userId') userId: string) {
-    return await this.userService.softDeleteUser(userId, UserAction.ADMIN_DELETE_REASON)
+  public async softDeleteByAdmin(@Param('userId') userId: string) {
+    return await this.userService.softDeleteUser(
+      userId,
+      UserAction.ADMIN_DELETE_REASON,
+    );
   }
 
   @Patch('account/restore')
   @ApiOperation({ summary: 'restore user' })
   @HttpCode(HttpStatus.OK)
-  public async restoreMyAccount (@Request() req) {
-    return await this.userService.restoreUser(req?.user.id)
+  public async restoreMyAccount(@Request() req) {
+    return await this.userService.restoreUser(req?.user.id);
+  }
+
+  @Get('user_account/in_active/:userId')
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiOperation({ summary: 'Inactive user account by admin' })
+  @HttpCode(HttpStatus.OK)
+  public async inActiveUser(@Param('userId') userId: string) {
+    return await this.userService.inActiveUser(userId);
+  }
+
+  @Get('user_account/ban/:userId')
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiOperation({ summary: 'Ban user account by admin' })
+  @HttpCode(HttpStatus.OK)
+  public async banUser(@Param('userId') userId: string) {
+    return await this.userService.banUser(userId);
   }
 }

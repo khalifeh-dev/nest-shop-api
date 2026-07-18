@@ -2,3 +2,9 @@ export enum UserAction {
     USER_DELETE_REASON = "USER_REQUEST_ACTION",
     ADMIN_DELETE_REASON = "ADMIN_REQUEST_ACTION",
 }
+
+export enum UserStatus {
+  Active = 'ACTIVE',
+  In_Active = 'INACTIVE',
+  Banned = 'BANNED',
+}
