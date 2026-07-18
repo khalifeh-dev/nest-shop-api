@@ -14,6 +14,7 @@ import { FindAll } from '../../common/types/find-all.type';
 import { pick } from 'lodash';
 import { SanitizeUser } from '../../common/types/user.type';
 import { CloudinaryService } from '../../common/services/cloudinary/cloudinary.service';
+import { UserAction } from '../../common/constants/user.constant';
 
 @Injectable()
 export class UserService {
@@ -92,6 +93,9 @@ export class UserService {
       const user = await this.prisma.replica.user.findUnique({ where: { id } });
       if (!user)
         throw new NotFoundException(`User Not Found With ID ${id} ❌.`);
+      if (user.deletedAt)
+        throw new BadRequestException('This User Has Already Been Deleted.');
+
       return this.sanitizeUser(user);
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
@@ -159,6 +163,10 @@ export class UserService {
       updatedAt,
       sellerInfo,
       sellerVerified,
+      deleteReason,
+      deletedAt,
+      deletedBy,
+      isDeleted,
       ...sanitizedUser
     } = user;
     return sanitizedUser;
@@ -329,5 +337,34 @@ export class UserService {
       );
 
     return token;
+  }
+
+  public async softDeleteUser(userId: string, reason?: string) {
+    await this.findOne(userId);
+    const updateUser = await this.prisma.master.user.update({
+      where: { id: userId },
+      data: {
+        deletedAt: new Date(),
+        deleteReason: reason || UserAction.USER_DELETE_REASON,
+        isDeleted: true,
+      },
+    });
+
+    return this.sanitizeUser(updateUser);
+  }
+
+  public async restoreUser(userId: string) {
+    await this.findOne(userId);
+
+    const updateUser = await this.prisma.master.user.update({
+      where: { id: userId },
+      data: {
+        deletedAt: null,
+        deleteReason: null,
+        isDeleted: false,
+      },
+    });
+
+    return this.sanitizeUser(updateUser);
   }
 }

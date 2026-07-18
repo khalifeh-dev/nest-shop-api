@@ -28,6 +28,7 @@ import {
 import { Pagination } from '../../common/types/pagination.type';
 import { SanitizeUser } from '../../common/types/user.type';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { UserAction } from '../../common/constants/user.constant';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -151,5 +152,27 @@ export class UserController {
   @HttpCode(HttpStatus.OK)
   public async getDevicesDetails (@Request() req, @Param("deviceId") deviceId: string) {
     return await this.userService.getDeviceDetails(req?.user.id, deviceId)
+  }
+
+  @Delete("account/delete")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove user account' })
+  public async softDeleteMyAccount (@Request() req, @Body() reason?: string) {
+    return await this.userService.softDeleteUser(req?.user.id, reason)
+  }
+
+  @Delete("delete_account/:userId")
+  @ApiParam({ name: 'id', description: 'User ID', type: String })
+  @ApiOperation({ summary: 'Remove user account by admin' })
+  @HttpCode(HttpStatus.OK)
+  public async softDeleteByAdmin (@Param('userId') userId: string) {
+    return await this.userService.softDeleteUser(userId, UserAction.ADMIN_DELETE_REASON)
+  }
+
+  @Patch('account/restore')
+  @ApiOperation({ summary: 'restore user' })
+  @HttpCode(HttpStatus.OK)
+  public async restoreMyAccount (@Request() req) {
+    return await this.userService.restoreUser(req?.user.id)
   }
 }

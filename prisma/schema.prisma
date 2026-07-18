@@ -50,7 +50,13 @@ model User {
   password  String
   avatar    String?
   bio       String?
+
   userStatus UserStatus @default(ACTIVE) @map("user_status")
+
+  deletedAt    DateTime? @map("deleted_at")
+  deletedBy    String?   @map("deleted_by")
+  deleteReason String?   @map("delete_reason")
+  isDeleted    Boolean   @default(false) @map("is_deleted")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
