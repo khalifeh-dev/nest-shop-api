@@ -2,7 +2,7 @@ import { User } from '@prisma/client';
 
 export type SanitizeUser = Omit<
   User,
-  'password' | 'createdAt' | 'updatedAt' | 'sellerInfo' | 'sellerVerified' | "deletedAt" | "deleteReason" | "deletedBy" | "isDeleted"
+  'password' | 'createdAt' | 'updatedAt' | 'sellerInfo' | 'sellerVerified' | "deleteReason" | "deletedBy" | "isDeleted"
 >;
 
 export enum UserStatus {

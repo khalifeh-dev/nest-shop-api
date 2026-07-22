@@ -18,15 +18,21 @@ import { UserAction, UserStatus } from '../../common/constants/user.constant';
 
 @Injectable()
 export class UserService {
+  private _write;
+  private _read;
+
   constructor(
     private prisma: DatabaseService,
     private encryption: EncryptionService,
     private cloudinaryService: CloudinaryService,
-  ) {}
+  ) {
+    this._write = this.prisma.master;
+    this._read = this.prisma.replica;
+  }
 
   public async create(dto: CreateUserDto): Promise<SanitizeUser> {
     try {
-      const isUserExist = await this.prisma.replica.user.findUnique({
+      const isUserExist = await this._read.user.findUnique({
         where: { email: dto.email },
       });
 
@@ -36,7 +42,7 @@ export class UserService {
       const { firstName, lastName, email, password } = dto;
       const hashPassword = await this.encryption.hash(password);
 
-      const createUser = await this.prisma.master.user.create({
+      const createUser = await this._write.user.create({
         data: { firstName, lastName, email, password: hashPassword },
       });
       return this.sanitizeUser(createUser);
@@ -55,7 +61,7 @@ export class UserService {
       const skip = (page - 1) * finalLimit;
 
       const [data, total] = await Promise.all([
-        this.prisma.replica.user.findMany({
+        this._read.user.findMany({
           skip,
           take: finalLimit,
           orderBy: { createdAt: 'desc' },
@@ -71,7 +77,7 @@ export class UserService {
             userStatus: true,
           },
         }),
-        this.prisma.replica.user.count(),
+        this._read.user.count(),
       ]);
 
       const totalPages = Math.ceil(total / finalLimit);
@@ -90,11 +96,9 @@ export class UserService {
 
   public async findOne(id: string): Promise<SanitizeUser> {
     try {
-      const user = await this.prisma.replica.user.findUnique({ where: { id } });
+      const user = await this._read.user.findUnique({ where: { id } });
       if (!user)
         throw new NotFoundException(`User Not Found With ID ${id} ❌.`);
-      if (user.deletedAt)
-        throw new BadRequestException('This User Has Already Been Deleted.');
 
       return this.sanitizeUser(user);
     } catch (error) {
@@ -103,9 +107,16 @@ export class UserService {
     }
   }
 
+  public async secureFindOne(id: string): Promise<SanitizeUser> {
+    const user = await this.findOne(id);
+    if (user.deletedAt)
+      throw new BadRequestException('This User Has Already Been Deleted.');
+    return user;
+  }
+
   public async update(id: string, dto: UpdateUserDto): Promise<SanitizeUser> {
     try {
-      await this.findOne(id);
+      await this.secureFindOne(id);
 
       const updateData = pick(dto, [
         'firstName',
@@ -116,7 +127,7 @@ export class UserService {
         'userName',
       ]);
 
-      const updateduser = await this.prisma.master.user.update({
+      const updateduser = await this._write.user.update({
         where: { id },
         data: updateData,
       });
@@ -130,8 +141,8 @@ export class UserService {
 
   public async remove(id: string): Promise<SanitizeUser> {
     try {
-      await this.findOne(id);
-      const removeUser = await this.prisma.master.user.delete({
+      await this.secureFindOne(id);
+      const removeUser = await this._write.user.delete({
         where: { id },
       });
       return this.sanitizeUser(removeUser);
@@ -143,7 +154,7 @@ export class UserService {
 
   public async findOneByEmail(email: string): Promise<User> {
     try {
-      const user = await this.prisma.replica.user.findUnique({
+      const user = await this._read.user.findUnique({
         where: { email },
       });
 
@@ -164,7 +175,6 @@ export class UserService {
       sellerInfo,
       sellerVerified,
       deleteReason,
-      deletedAt,
       deletedBy,
       isDeleted,
       ...sanitizedUser
@@ -173,244 +183,299 @@ export class UserService {
   }
 
   public async uploadAvatar(file: Express.Multer.File, userId: string) {
-    const uploadResult = await this.cloudinaryService.uploadAvatar(
-      file,
-      userId,
-    );
-
-    const userImages = await this.prisma.master.userImage.create({
-      data: {
+    try {
+      await this.secureFindOne(userId);
+      const uploadResult = await this.cloudinaryService.uploadAvatar(
+        file,
         userId,
+      );
+
+      const userImages = await this._write.userImage.create({
+        data: {
+          userId,
+          url: uploadResult.secure_url,
+          publicId: uploadResult.public_id,
+          isActive: true,
+          mimeType: file.mimetype,
+          size: file.size,
+        },
+      });
+
+      await this.update(userId, { avatar: uploadResult.secure_url });
+
+      return {
         url: uploadResult.secure_url,
         publicId: uploadResult.public_id,
-        isActive: true,
-        mimeType: file.mimetype,
-        size: file.size,
-      },
-    });
-
-    const updateUserAvatar = await this.prisma.master.user.update({
-      where: { id: userId },
-      data: { avatar: uploadResult.secure_url },
-    });
-
-    return {
-      url: uploadResult.secure_url,
-      publicId: uploadResult.public_id,
-      imageId: userImages.id,
-    };
+        imageId: userImages.id,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
   }
 
   public async removeAvatar(userId: string) {
-    const user = await this.prisma.replica.user.findUnique({
-      where: { id: userId },
-      select: { avatar: true, id: true },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (!user.avatar) {
-      throw new BadRequestException('User has no avatar');
-    }
-
-    const userImage = await this.prisma.master.userImage.findFirst({
-      where: {
-        userId,
-        url: user.avatar,
-        isActive: true,
-      },
-    });
-
-    if (userImage) {
-      await this.cloudinaryService.deleteFile(userImage.publicId);
-      await this.prisma.master.userImage.update({
-        where: { id: userImage.id },
-        data: { isActive: false },
+    try {
+      const user = await this._read.user.findUnique({
+        where: { id: userId },
+        select: { avatar: true, id: true },
       });
-    }
 
-    return this.prisma.master.user.update({
-      where: { id: userId },
-      data: { avatar: null },
-    });
+      if (user.deletedAt)
+        throw new BadRequestException('This User Has Already Been Deleted.');
+
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      if (!user.avatar) {
+        throw new BadRequestException('User has no avatar');
+      }
+
+      const userImage = await this._write.userImage.findFirst({
+        where: {
+          userId,
+          url: user.avatar,
+          isActive: true,
+        },
+      });
+
+      if (userImage) {
+        await this.cloudinaryService.deleteFile(userImage.publicId);
+        await this._write.userImage.update({
+          where: { id: userImage.id },
+          data: { isActive: false },
+        });
+      }
+
+      return this._write.user.update({
+        where: { id: userId },
+        data: { avatar: null },
+      });
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      if (error instanceof BadRequestException) return error;
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
   }
 
   public async getUserImages(userId: string) {
-    return await this.prisma.replica.userImage.findMany({
-      where: {
-        userId,
-        isActive: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      select: {
-        id: true,
-        url: true,
-        publicId: true,
-        createdAt: true,
-        mimeType: true,
-        size: true,
-      },
-    });
+    try {
+      await this.secureFindOne(userId);
+      return await this._read.userImage.findMany({
+        where: {
+          userId,
+          isActive: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        select: {
+          id: true,
+          url: true,
+          publicId: true,
+          createdAt: true,
+          mimeType: true,
+          size: true,
+        },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
   }
 
   public async updateRefreshToken(userId: string, refreshTokenId: string) {
-    await this.findOne(userId);
+    try {
+      await this.secureFindOne(userId);
 
-    const updateToken = await this.prisma.master.user.update({
-      where: { id: userId },
-      data: { refreshTokens: { connect: { id: refreshTokenId } } },
-    });
+      const updateToken = await this._write.user.update({
+        where: { id: userId },
+        data: { refreshTokens: { connect: { id: refreshTokenId } } },
+      });
 
-    return this.sanitizeUser(updateToken);
+      return this.sanitizeUser(updateToken);
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
   }
 
   public async getUserDevices(userId: string) {
-    await this.findOne(userId);
+    try {
+      await this.secureFindOne(userId);
 
-    const now = new Date();
+      const now = new Date();
 
-    const devices = await this.prisma.replica.refreshToken.groupBy({
-      by: ['deviceId', 'deviceType', 'deviceInfo'],
-      where: {
-        userId: userId,
-        expiresAt: { gt: now },
-        isRevoked: false,
-        deviceId: { not: null },
-      },
-      _max: {
-        lastUsedAt: true,
-        ipAddress: true,
-        userAgent: true,
-        createdAt: true,
-      },
-      _count: {
-        _all: true,
-      },
-      orderBy: {
-        _max: {
-          lastUsedAt: 'desc',
+      const devices = await this._read.refreshToken.groupBy({
+        by: ['deviceId', 'deviceType', 'deviceInfo'],
+        where: {
+          userId: userId,
+          expiresAt: { gt: now },
+          isRevoked: false,
+          deviceId: { not: null },
         },
-      },
-    });
+        _max: {
+          lastUsedAt: true,
+          ipAddress: true,
+          userAgent: true,
+          createdAt: true,
+        },
+        _count: {
+          _all: true,
+        },
+        orderBy: {
+          _max: {
+            lastUsedAt: 'desc',
+          },
+        },
+      });
 
-    const deviceIds = devices
-      .map((d) => d.deviceId)
-      .filter(Boolean) as string[];
+      const deviceIds = devices
+        .map((d) => d.deviceId)
+        .filter(Boolean) as string[];
 
-    const locationData = await this.prisma.replica.refreshToken.findMany({
-      where: {
-        userId: userId,
-        deviceId: { in: deviceIds },
-        expiresAt: { gt: now },
-        isRevoked: false,
-        location: { not: Prisma.JsonNull },
-      },
-      select: {
-        deviceId: true,
-        location: true,
-      },
-      distinct: ['deviceId'],
-    });
+      const locationData = await this._read.refreshToken.findMany({
+        where: {
+          userId: userId,
+          deviceId: { in: deviceIds },
+          expiresAt: { gt: now },
+          isRevoked: false,
+          location: { not: Prisma.JsonNull },
+        },
+        select: {
+          deviceId: true,
+          location: true,
+        },
+        distinct: ['deviceId'],
+      });
 
-    const locationMap = new Map(
-      locationData.map((item) => [item.deviceId, item.location]),
-    );
+      const locationMap = new Map(
+        locationData.map((item) => [item.deviceId, item.location]),
+      );
 
-    return devices.map((device) => ({
-      deviceId: device.deviceId,
-      deviceType: device.deviceType,
-      deviceInfo: device.deviceInfo,
-      lastUsedAt: device._max?.lastUsedAt,
-      ipAddress: device._max?.ipAddress,
-      userAgent: device._max?.userAgent,
-      location: locationMap.get(device.deviceId) || null,
-      firstSeen: device._max?.createdAt,
-      activeSessions: device._count?._all || 0,
-    }));
+      return devices.map((device) => ({
+        deviceId: device.deviceId,
+        deviceType: device.deviceType,
+        deviceInfo: device.deviceInfo,
+        lastUsedAt: device._max?.lastUsedAt,
+        ipAddress: device._max?.ipAddress,
+        userAgent: device._max?.userAgent,
+        location: locationMap.get(device.deviceId) || null,
+        firstSeen: device._max?.createdAt,
+        activeSessions: device._count?._all || 0,
+      }));
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
   }
 
   public async getDeviceDetails(userId: string, deviceId: string) {
-    const token = await this.prisma.replica.refreshToken.findFirst({
-      where: {
-        userId: userId,
-        deviceId: deviceId,
-        isRevoked: false,
-      },
-      select: {
-        deviceId: true,
-        deviceType: true,
-        deviceInfo: true,
-        ipAddress: true,
-        userAgent: true,
-        location: true,
-        lastUsedAt: true,
-        createdAt: true,
-        expiresAt: true,
-      },
-    });
+    try {
+      this.secureFindOne(userId);
+      const token = await this._read.refreshToken.findFirst({
+        where: {
+          userId: userId,
+          deviceId: deviceId,
+          isRevoked: false,
+        },
+        select: {
+          deviceId: true,
+          deviceType: true,
+          deviceInfo: true,
+          ipAddress: true,
+          userAgent: true,
+          location: true,
+          lastUsedAt: true,
+          createdAt: true,
+          expiresAt: true,
+        },
+      });
 
-    if (!token)
-      throw new NotFoundException(
-        'The specified device was not found or is inactive.',
-      );
+      if (!token)
+        throw new NotFoundException(
+          'The specified device was not found or is inactive.',
+        );
 
-    return token;
+      return token;
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
   }
 
   public async softDeleteUser(userId: string, reason?: string) {
-    await this.findOne(userId);
-    const updateUser = await this.prisma.master.user.update({
-      where: { id: userId },
-      data: {
-        deletedAt: new Date(),
-        deleteReason: reason || UserAction.USER_DELETE_REASON,
-        isDeleted: true,
-      },
-    });
+    try {
+      await this.findOne(userId);
+      const updateUser = await this._write.user.update({
+        where: { id: userId },
+        data: {
+          deletedAt: new Date(),
+          deleteReason: reason || UserAction.USER_DELETE_REASON,
+          isDeleted: true,
+        },
+      });
 
-    return this.sanitizeUser(updateUser);
+      return this.sanitizeUser(updateUser);
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
   }
 
   public async restoreUser(userId: string) {
-    await this.findOne(userId);
+    try {
+      await this.secureFindOne(userId);
 
-    const updateUser = await this.prisma.master.user.update({
-      where: { id: userId },
-      data: {
-        deletedAt: null,
-        deleteReason: null,
-        isDeleted: false,
-      },
-    });
+      const updateUser = await this._write.user.update({
+        where: { id: userId },
+        data: {
+          deletedAt: null,
+          deleteReason: null,
+          isDeleted: false,
+        },
+      });
 
-    return this.sanitizeUser(updateUser);
+      return this.sanitizeUser(updateUser);
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
   }
 
   public async inActiveUser(userId: string) {
-    await this.findOne(userId);
+    try {
+      await this.secureFindOne(userId);
 
-    const updatedUser = await this.updateUserStatus(
-      userId,
-      UserStatus.In_Active,
-    );
+      const updatedUser = await this.updateUserStatus(
+        userId,
+        UserStatus.In_Active,
+      );
 
-    return this.sanitizeUser(updatedUser);
+      return this.sanitizeUser(updatedUser);
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
   }
 
   public async banUser(userId: string) {
-    await this.findOne(userId);
+    try {
+      await this.secureFindOne(userId);
 
-    const updatedUser = await this.updateUserStatus(userId, UserStatus.Banned);
+      const updatedUser = await this.updateUserStatus(
+        userId,
+        UserStatus.Banned,
+      );
 
-    return this.sanitizeUser(updatedUser);
+      return this.sanitizeUser(updatedUser);
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
   }
 
   private async updateUserStatus(userId: string, status: UserStatus) {
-    return await this.prisma.master.user.update({
+    return await this._write.user.update({
       where: { id: userId },
       data: { userStatus: status },
     });
