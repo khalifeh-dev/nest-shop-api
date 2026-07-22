@@ -8,7 +8,7 @@ import {
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { DatabaseService } from '../../common/database/database.service';
-import { User } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import { EncryptionService } from '../../common/services/encryption/encryption.service';
 import { FindAll } from '../../common/types/find-all.type';
 import { pick } from 'lodash';
@@ -285,11 +285,10 @@ export class UserService {
         lastUsedAt: true,
         ipAddress: true,
         userAgent: true,
-        location: true,
         createdAt: true,
       },
       _count: {
-        deviceId: true,
+        _all: true,
       },
       orderBy: {
         _max: {
@@ -298,6 +297,29 @@ export class UserService {
       },
     });
 
+    const deviceIds = devices
+      .map((d) => d.deviceId)
+      .filter(Boolean) as string[];
+
+    const locationData = await this.prisma.replica.refreshToken.findMany({
+      where: {
+        userId: userId,
+        deviceId: { in: deviceIds },
+        expiresAt: { gt: now },
+        isRevoked: false,
+        location: { not: Prisma.JsonNull },
+      },
+      select: {
+        deviceId: true,
+        location: true,
+      },
+      distinct: ['deviceId'],
+    });
+
+    const locationMap = new Map(
+      locationData.map((item) => [item.deviceId, item.location]),
+    );
+
     return devices.map((device) => ({
       deviceId: device.deviceId,
       deviceType: device.deviceType,
@@ -305,9 +327,9 @@ export class UserService {
       lastUsedAt: device._max?.lastUsedAt,
       ipAddress: device._max?.ipAddress,
       userAgent: device._max?.userAgent,
-      location: device._max?.location,
+      location: locationMap.get(device.deviceId) || null,
       firstSeen: device._max?.createdAt,
-      activeSessions: device._count?.deviceId || 0,
+      activeSessions: device._count?._all || 0,
     }));
   }
 
@@ -371,7 +393,10 @@ export class UserService {
   public async inActiveUser(userId: string) {
     await this.findOne(userId);
 
-    const updatedUser = await this.updateUserStatus(userId, UserStatus.In_Active)
+    const updatedUser = await this.updateUserStatus(
+      userId,
+      UserStatus.In_Active,
+    );
 
     return this.sanitizeUser(updatedUser);
   }
@@ -379,7 +404,7 @@ export class UserService {
   public async banUser(userId: string) {
     await this.findOne(userId);
 
-    const updatedUser = await this.updateUserStatus(userId, UserStatus.Banned)
+    const updatedUser = await this.updateUserStatus(userId, UserStatus.Banned);
 
     return this.sanitizeUser(updatedUser);
   }

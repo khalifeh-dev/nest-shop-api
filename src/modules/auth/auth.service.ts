@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -15,6 +16,7 @@ import { SignInDto } from './dto/sign-in.dto';
 import { EncryptionService } from '../../common/services/encryption/encryption.service';
 import { DeviceDto } from './dto/device.dto';
 import { LogOut } from '../../common/constants/auth.constant';
+import type { LoggerService } from '../../common/services/logger/logger-options.interface';
 
 @Injectable()
 export class AuthService {
@@ -25,6 +27,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private encryption: EncryptionService,
+    @Inject('LoggerService') private logger: LoggerService
   ) {}
 
   public async signUp(dto: SignUpDto & DeviceDto) {
@@ -37,6 +40,7 @@ export class AuthService {
     };
 
     const createUser = await this.userService.create(userData);
+    this.logger.info(`User Created ✅`)
 
     const { id, firstName, lastName, email, userName } = createUser;
 

@@ -8,16 +8,18 @@ import { UserModule } from './modules/user/user.module';
 import { CloudinaryModule } from './common/services/cloudinary/cloudinary.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RefreshTokenModule } from './modules/refresh-token/refresh-token.module';
-import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
-import { Redis } from "ioredis"
-import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis"
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { Redis } from 'ioredis';
+import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { APP_GUARD } from '@nestjs/core';
 import { EmailModule } from './common/services/email/email.module';
 import { VerifyCodeModule } from './common/services/verify-code/verify-code.module';
+import { LoggerModule } from './common/services/logger/logger.module';
+import { LoggerService } from './common/services/logger/logger.service';
+import { PinoLoggerService } from './common/services/logger/pino/pino.service';
 
 @Module({
   imports: [
-
     // External Modules
     ConfigModule.forRoot({
       isGlobal: true,
@@ -39,10 +41,22 @@ import { VerifyCodeModule } from './common/services/verify-code/verify-code.modu
         },
         {
           name: 'auth',
-          ttl: 60_000, 
+          ttl: 60_000,
           limit: 10,
         },
       ],
+    }),
+
+    // Internal Custom Module
+    LoggerModule.forRoot({
+      level: 'debug',
+      enableConsole: true,
+      enableFile: true,
+      filePath: './logs/app.log',
+      // enableLoki: process.env.NODE_ENV === 'production',
+      // lokiUrl: process.env.LOKI_URL,
+      serviceName: 'my-nest-app',
+      labels: { team: 'backend' },
     }),
 
     // Modules
@@ -54,7 +68,6 @@ import { VerifyCodeModule } from './common/services/verify-code/verify-code.modu
     RefreshTokenModule,
     EmailModule,
     VerifyCodeModule,
-
   ],
   controllers: [AppController],
   providers: [
@@ -62,6 +75,10 @@ import { VerifyCodeModule } from './common/services/verify-code/verify-code.modu
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: LoggerService,
+      useClass: PinoLoggerService,
     },
   ],
 })
