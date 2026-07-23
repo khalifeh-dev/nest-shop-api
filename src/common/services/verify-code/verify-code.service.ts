@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
@@ -50,7 +51,7 @@ export class VerifyCodeService {
         email,
         code: hashedCode,
         expiresAt,
-        type: VerifyCodeType[type]
+        type: VerifyCodeType[type],
       },
     });
 
@@ -146,23 +147,42 @@ export class VerifyCodeService {
     };
   }
 
-  //! Set Cron Job For This
-  public async cleanupExpiredCodes() {
-    const result = await this.prisma.master.verifyCode.updateMany({
-      where: {
-        expiresAt: { lt: new Date() },
-        isUsed: false,
-      },
-      data: {
-        isUsed: true,
-        usedAt: new Date(),
-      },
-    });
+  public async cleanUpExpiredCodes(olderThanDays: number = 7) {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
-    return {
-      message: `Cleaned up ${result.count} expired codes`,
-      count: result.count,
-    };
+    try {
+      const result = await this.prisma.transaction(async (tx) => {
+        const expiredUnused = await tx.verifyCode.deleteMany({
+          where: {
+            expiresAt: { lt: new Date() },
+            isUsed: false,
+          },
+        });
+
+        const oldUsed = await tx.verifyCode.deleteMany({
+          where: {
+            usedAt: { lt: cutoffDate },
+            isUsed: true,
+          },
+        });
+
+        return {
+          expiredUnusedCount: expiredUnused.count,
+          oldUsedCount: oldUsed.count,
+          total: expiredUnused.count + oldUsed.count,
+        };
+      });
+
+      return {
+        count: result.total,
+        details: result,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Internal Server Error (VerifyCode<CleanUpExpiredCodes>) ❌.',
+      );
+    }
   }
 
   public generateVerificationCode(): string {

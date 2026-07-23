@@ -10,4 +10,9 @@ export class TasksService {
   public async cleanRefreshTokens() {
     const result = await this.cleanUpJob.cleanUpRefreshTokens();
   }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  public async cleanUpVerifyCodes () {
+    const result = await this.cleanUpJob.cleanUpVerifyCode();
+  }
 }
