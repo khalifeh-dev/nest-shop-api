@@ -29,12 +29,16 @@ import { Pagination } from '../../common/types/pagination.type';
 import { SanitizeUser } from '../../common/types/user.type';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UserAction } from '../../common/constants/user.constant';
+import { RefreshTokenService } from '../refresh-token/refresh-token.service';
 
 @ApiTags('Users')
 @ApiBearerAuth()
 @Controller('users')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private userService: UserService,
+    private refreshTokenService: RefreshTokenService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a user' })
@@ -169,6 +173,7 @@ export class UserController {
   @ApiOperation({ summary: 'Remove user account by admin' })
   @HttpCode(HttpStatus.OK)
   public async softDeleteByAdmin(@Param('userId') userId: string) {
+    await this.refreshTokenService.revokeAllTokensByDevice(userId);
     return await this.userService.softDeleteUser(
       userId,
       UserAction.ADMIN_DELETE_REASON,
@@ -195,6 +200,7 @@ export class UserController {
   @ApiOperation({ summary: 'Ban user account by admin' })
   @HttpCode(HttpStatus.OK)
   public async banUser(@Param('userId') userId: string) {
+    await this.refreshTokenService.revokeAllTokensByDevice(userId);
     return await this.userService.banUser(userId);
   }
 }

@@ -20,6 +20,7 @@ import { VerifyCodeService } from '../../common/services/verify-code/verify-code
 import { ForgetPasswordDto } from './dto/forget-password.dto';
 import { resetPasswordDto } from './dto/reset-password.dto';
 import { VerifyCodeDto } from './dto/verify-code.dto';
+import { RefreshTokenService } from '../refresh-token/refresh-token.service';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -27,6 +28,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private verifyCode: VerifyCodeService,
+    private refreshTokenService: RefreshTokenService
   ) {}
 
   @Post('sign-up')
@@ -39,7 +41,7 @@ export class AuthController {
   ) {
     const clientData: DeviceInfo = DeviceUtil.extractDeviceInfo(req);
 
-    const { user, tokens } = await this.authService.signUp({
+    const { user, tokens, deviceInfo } = await this.authService.signUp({
       ...dto,
       ...clientData,
     });
@@ -49,6 +51,7 @@ export class AuthController {
     return {
       user,
       accessToken: tokens.accessToken,
+      deviceInfo
     };
   }
 
@@ -62,7 +65,7 @@ export class AuthController {
   ) {
     const clientData: DeviceInfo = DeviceUtil.extractDeviceInfo(req);
 
-    const { user, tokens } = await this.authService.signIn({
+    const { user, tokens, deviceInfo } = await this.authService.signIn({
       ...dto,
       ...clientData,
     });
@@ -72,6 +75,7 @@ export class AuthController {
     return {
       user,
       accessToken: tokens.accessToken,
+      deviceInfo
     };
   }
 
@@ -163,9 +167,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   public async resetPassword(
     @Req() req: Request,
+    @CurrentUser('sub') userId: string,
     @Body() dto: resetPasswordDto,
   ) {
     const deviceInfo: DeviceInfo = DeviceUtil.extractDeviceInfo(req);
+    await this.refreshTokenService.revokeAllTokensByDevice(userId)
     return this.verifyCode.resetPassword({
       ...dto,
       deviceInfo: deviceInfo.userAgent,

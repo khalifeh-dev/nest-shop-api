@@ -20,6 +20,10 @@ import type { LoggerService } from '../../common/services/logger/logger-options.
 
 @Injectable()
 export class AuthService {
+
+  private _read;
+  private _write;
+
   constructor(
     private prisma: DatabaseService,
     private userService: UserService,
@@ -28,7 +32,10 @@ export class AuthService {
     private configService: ConfigService,
     private encryption: EncryptionService,
     @Inject('LoggerService') private logger: LoggerService
-  ) {}
+  ) {
+    this._read = this.prisma.replica
+    this._write = this.prisma.master
+  }
 
   public async signUp(dto: SignUpDto & DeviceDto) {
     const userData = {
@@ -77,6 +84,9 @@ export class AuthService {
         accessToken,
         refreshToken: refreshToken.token,
       },
+      deviceInfo: {
+        deviceId: refreshToken.deviceId
+      }
     };
   }
 
@@ -132,15 +142,20 @@ export class AuthService {
         accessToken,
         refreshToken: refreshToken.token,
       },
+      deviceInfo: {
+        deviceId: refreshToken.deviceId
+      }
     };
   }
 
   public async signOut(userId: string, deviceId?: string) {
+    await this.userService.secureFindOne(userId)
+
     if (deviceId) {
       return await this.refreshTokenService.revokeToken(userId, deviceId);
     }
 
-    const token = await this.prisma.master.refreshToken.findFirst({
+    const token = await this._read.refreshToken.findFirst({
       where: {
         userId,
         isRevoked: false,
@@ -156,7 +171,7 @@ export class AuthService {
       throw new NotFoundException('No active token found for this user');
     }
 
-    await this.prisma.master.refreshToken.update({
+    await this._write.refreshToken.update({
       where: { id: token.id },
       data: {
         isRevoked: true,
@@ -172,16 +187,18 @@ export class AuthService {
   }
 
   public async signOutAll(userId: string) {
-    await this.userService.findOne(userId);
+    await this.userService.secureFindOne(userId);
     return await this.refreshTokenService.revokeAllTokensByDevice(userId);
   }
 
   public async signOutDevice(userId: string, deviceId?: string) {
+    await this.userService.secureFindOne(userId)
     if (!deviceId) throw new BadRequestException('Device ID is required');
 
     return await this.refreshTokenService.revokeToken(userId, deviceId);
   }
 
+  //! Fix Use Transcation Bug !// 
   public async refresh(
     providedRefreshToken: string,
     deviceDto: DeviceDto,
@@ -202,7 +219,7 @@ export class AuthService {
 
     const hashedToken = await this.encryption.hash(providedRefreshToken);
 
-    const existingToken = await this.prisma.replica.refreshToken.findFirst({
+    const existingToken = await this._read.refreshToken.findFirst({
       where: {
         userId,
         token: hashedToken,

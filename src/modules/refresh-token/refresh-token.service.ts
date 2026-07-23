@@ -14,33 +14,40 @@ import { LogOut } from '../../common/constants/auth.constant';
 
 @Injectable()
 export class RefreshTokenService {
+
+  private _read;
+  private _write;
+
   constructor(
     private prisma: DatabaseService,
     private jwtService: JwtService,
     private encryption: EncryptionService,
     private configService: ConfigService,
     private userService: UserService,
-  ) {}
+  ) {
+    this._read = this.prisma.replica
+    this._write = this.prisma.master
+  }
 
   public async createRefreshToken(userId: string, deviceInfo: DeviceInfo) {
     const maxTokensPerDevice =
       this.configService.get<number>('MAX_TOKENS_PER_DEVICE') || 3;
     const deviceId = this.generateDeviceId(deviceInfo);
 
-    const existingTokens = await this.prisma.replica.refreshToken.findMany({
+    const existingTokens = await this._read.refreshToken.findMany({
       where: { userId, deviceId, isRevoked: false },
       orderBy: { createdAt: 'desc' },
     });
 
     if (existingTokens.length >= maxTokensPerDevice) {
       const oldestToken = existingTokens[existingTokens.length - 1];
-      await this.prisma.master.refreshToken.update({
+      await this._write.refreshToken.update({
         where: { id: oldestToken.id },
         data: { isRevoked: true },
       });
     }
 
-    await this.prisma.master.refreshToken.updateMany({
+    await this._write.refreshToken.updateMany({
       where: {
         userId,
         expiresAt: { lt: new Date() },
@@ -53,7 +60,7 @@ export class RefreshTokenService {
       },
     });
 
-    const user = await this.prisma.replica.user.findUnique({
+    const user = await this._read.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -75,7 +82,7 @@ export class RefreshTokenService {
 
     const hashedToken = await this.encryption.hash(newToken);
 
-    const token = await this.prisma.master.refreshToken.create({
+    const token = await this._write.refreshToken.create({
       data: {
         token: hashedToken,
         userId,
@@ -91,13 +98,14 @@ export class RefreshTokenService {
     return {
       token: newToken,
       id: token.id,
+      deviceId
     };
   }
 
   public async revokeToken(userId: string, deviceId: string) {
     try {
       await this.userService.findOne(userId);
-      const result = await this.prisma.master.refreshToken.updateMany({
+      const result = await this._write.refreshToken.updateMany({
         where: {
           userId,
           deviceId,
@@ -113,7 +121,7 @@ export class RefreshTokenService {
       if (result.count === 0)
         throw new NotFoundException('No Active Token Found For This Device.');
 
-      const token = await this.prisma.replica.refreshToken.findFirst({
+      const token = await this._read.refreshToken.findFirst({
         where: {
           userId,
           deviceId,
@@ -140,7 +148,7 @@ export class RefreshTokenService {
     try {
       await this.userService.findOne(userId);
 
-      const result = await this.prisma.master.refreshToken.updateMany({
+      const result = await this._write.refreshToken.updateMany({
         where: { userId, isRevoked: false },
         data: {
           isRevoked: true,
@@ -163,7 +171,7 @@ export class RefreshTokenService {
     try {
       await this.findOneToken(tokenId);
 
-      return await this.prisma.master.refreshToken.update({
+      return await this._write.refreshToken.update({
         where: { id: tokenId },
         data: {
           isRevoked: true,
@@ -179,7 +187,7 @@ export class RefreshTokenService {
 
   public async findOneToken(tokenId: string) {
     try {
-      const token = await this.prisma.master.refreshToken.findUnique({
+      const token = await this._write.refreshToken.findUnique({
         where: { id: tokenId },
       });
 
