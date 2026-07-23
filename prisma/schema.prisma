@@ -38,6 +38,11 @@ enum UserStatus {
   BANNED
 }
 
+enum VerifyCodeType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
 //! <----------------------------------------<< Moldes >>---------------------------------------->
 
 //? <----------------------- User ----------------------->
@@ -136,6 +141,7 @@ model verifyCode {
   userId    String   @map("user_id")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  email     String
   code      String 
   expiresAt DateTime @map("expires_at")
   
@@ -144,6 +150,8 @@ model verifyCode {
   
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
+  type       VerifyCodeType
   
   @@index([userId])
   @@index([code])

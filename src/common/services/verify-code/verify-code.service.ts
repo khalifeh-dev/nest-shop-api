@@ -9,6 +9,7 @@ import { EncryptionService } from '../encryption/encryption.service';
 import { UserService } from '../../../modules/user/user.service';
 import { ConfigService } from '@nestjs/config';
 import { RefreshTokenService } from '../../../modules/refresh-token/refresh-token.service';
+import { VerifyCodeType } from '../../constants/auth.constant';
 
 @Injectable()
 export class VerifyCodeService {
@@ -21,7 +22,7 @@ export class VerifyCodeService {
     private refreshTokenService: RefreshTokenService,
   ) {}
 
-  public async sendVerifyCode(email: string) {
+  public async sendVerifyCode(email: string, type: VerifyCodeType) {
     const user = await this.userService.findOneByEmail(email);
 
     await this.prisma.master.verifyCode.updateMany({
@@ -46,8 +47,10 @@ export class VerifyCodeService {
     await this.prisma.master.verifyCode.create({
       data: {
         userId: user.id,
+        email,
         code: hashedCode,
         expiresAt,
+        type: VerifyCodeType[type]
       },
     });
 
@@ -70,9 +73,6 @@ export class VerifyCodeService {
 
   public async verifyCode(email: string, code: string) {
     const user = await this.userService.findOneByEmail(email);
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
 
     const resetRequest = await this.prisma.replica.verifyCode.findFirst({
       where: {
@@ -165,7 +165,7 @@ export class VerifyCodeService {
     };
   }
 
-  private generateVerificationCode(): string {
+  public generateVerificationCode(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 }

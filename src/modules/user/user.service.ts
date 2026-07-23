@@ -159,6 +159,8 @@ export class UserService {
       });
 
       if (!user) throw new NotFoundException(`User Not Found With Email ❌.`);
+      if (user.deletedAt)
+        throw new BadRequestException('This User Has Already Been Deleted.');
 
       return user;
     } catch (error) {

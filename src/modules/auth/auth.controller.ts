@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   HttpCode,
@@ -21,15 +22,29 @@ import { ForgetPasswordDto } from './dto/forget-password.dto';
 import { resetPasswordDto } from './dto/reset-password.dto';
 import { VerifyCodeDto } from './dto/verify-code.dto';
 import { RefreshTokenService } from '../refresh-token/refresh-token.service';
+import { UserService } from '../user/user.service';
+import { DatabaseService } from '../../common/database/database.service';
+import { Throttle } from '@nestjs/throttler';
+import { VerifyCodeType } from '../../common/constants/auth.constant';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
+  private readonly RESEND_COOLDOWN;
+  private readonly CODE_EXPIRY;
+  private readonly MAX_ATTEMPTS_PER_DAY;
+
   constructor(
-    private readonly authService: AuthService,
+    private prisma: DatabaseService,
+    private authService: AuthService,
+    private userService: UserService,
     private verifyCode: VerifyCodeService,
-    private refreshTokenService: RefreshTokenService
-  ) {}
+    private refreshTokenService: RefreshTokenService,
+  ) {
+    this.RESEND_COOLDOWN = process.env.RESEND_COOLDOWN;
+    this.CODE_EXPIRY = process.env.CODE_EXPIRY;
+    this.MAX_ATTEMPTS_PER_DAY = process.env.MAX_ATTEMPTS_PER_DAY;
+  }
 
   @Post('sign-up')
   @ApiOperation({ summary: 'Register a user' })
@@ -51,7 +66,7 @@ export class AuthController {
     return {
       user,
       accessToken: tokens.accessToken,
-      deviceInfo
+      deviceInfo,
     };
   }
 
@@ -75,7 +90,7 @@ export class AuthController {
     return {
       user,
       accessToken: tokens.accessToken,
-      deviceInfo
+      deviceInfo,
     };
   }
 
@@ -150,16 +165,15 @@ export class AuthController {
   @ApiOperation({ summary: 'Request password reset' })
   @HttpCode(HttpStatus.OK)
   public async forgetPassword(@Body() dto: ForgetPasswordDto) {
-    return await this.verifyCode.sendVerifyCode(dto.email);
+    await this.userService.findOneByEmail(dto.email);
+    return await this.verifyCode.sendVerifyCode(dto.email, VerifyCodeType.PASSWORD_RESET);
   }
 
   @Post('verify-reset-code')
   @ApiOperation({ summary: 'Verify reset code' })
   @HttpCode(HttpStatus.OK)
-  public async verifyResetCode(
-    @Body() dto: VerifyCodeDto,
-  ) {
-    return this.verifyCode.verifyCode(dto.email, dto.code);
+  public async verifyResetCode(@Body() dto: VerifyCodeDto) {
+    return await this.verifyCode.verifyCode(dto.email, dto.code);
   }
 
   @Post('reset-password')
@@ -171,11 +185,35 @@ export class AuthController {
     @Body() dto: resetPasswordDto,
   ) {
     const deviceInfo: DeviceInfo = DeviceUtil.extractDeviceInfo(req);
-    await this.refreshTokenService.revokeAllTokensByDevice(userId)
+    await this.refreshTokenService.revokeAllTokensByDevice(userId);
     return this.verifyCode.resetPassword({
       ...dto,
       deviceInfo: deviceInfo.userAgent,
     });
+  }
+
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  public async resendVerifyResetCode(@Body() dto: ForgetPasswordDto) {
+    await this.userService.findOneByEmail(dto.email);
+    await this.checkResendCooldown(dto.email);
+    await this.checkDailyLimit(dto.email);
+
+    await this.prisma.master.verifyCode.updateMany({
+      where: {
+        email: dto.email,
+        type: 'EMAIL_VERIFICATION',
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      data: {
+        expiresAt: new Date(),
+      },
+    });
+
+    return await this.verifyCode.sendVerifyCode(dto.email, VerifyCodeType.EMAIL_VERIFICATION)
+
   }
 
   private clearAuthCookies(res: Response) {
@@ -199,14 +237,59 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 900_000, // 15M
+      maxAge: 900_000,
     });
 
     res.cookie('refresh-token', tokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 1_209_600, // 14D
+      maxAge: 1_209_600,
     });
   }
+
+  private async checkResendCooldown(email: string) {
+    const lastRequest = await this.getLastRequestTime(email);
+
+    if (lastRequest) {
+      const timeSinceLastRequest = (Date.now() - lastRequest) / 1000;
+      if (timeSinceLastRequest < this.RESEND_COOLDOWN) {
+        const remainingTime = Math.ceil(
+          this.RESEND_COOLDOWN - timeSinceLastRequest,
+        );
+        throw new BadRequestException(
+          `Please Wait To ${remainingTime}`,
+        );
+      }
+    }
+  }
+
+  private async checkDailyLimit(email: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const count = await this.prisma.replica.verifyCode.count({
+      where: {
+        email,
+        type: 'EMAIL_VERIFICATION',
+        createdAt: { gte: today },
+      },
+    });
+
+    if (count >= this.MAX_ATTEMPTS_PER_DAY) {
+      throw new BadRequestException(
+        `You have exceeded the allowed number of code requests. Please try again later.`
+      );
+    }
+  }
+
+  private async saveLastRequest(email: string) {
+    this.requestCache.set(email, Date.now());
+  }
+
+  private async getLastRequestTime(email: string): Promise<number | null> {
+    return this.requestCache.get(email) || null;
+  }
+
+  private requestCache = new Map<string, number>();
 }
