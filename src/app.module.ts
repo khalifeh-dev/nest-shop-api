@@ -17,6 +17,8 @@ import { VerifyCodeModule } from './common/services/verify-code/verify-code.modu
 import { LoggerModule } from './common/services/logger/logger.module';
 import { LoggerService } from './common/services/logger/logger.service';
 import { PinoLoggerService } from './common/services/logger/pino/pino.service';
+import { TasksModule } from './common/tasks/tasks.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -47,6 +49,8 @@ import { PinoLoggerService } from './common/services/logger/pino/pino.service';
       ],
     }),
 
+    ScheduleModule.forRoot(),
+
     // Internal Custom Module
     LoggerModule.forRoot({
       level: 'debug',
@@ -68,6 +72,7 @@ import { PinoLoggerService } from './common/services/logger/pino/pino.service';
     RefreshTokenModule,
     EmailModule,
     VerifyCodeModule,
+    TasksModule,
   ],
   controllers: [AppController],
   providers: [

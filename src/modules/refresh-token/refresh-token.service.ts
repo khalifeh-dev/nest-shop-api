@@ -14,7 +14,6 @@ import { LogOut } from '../../common/constants/auth.constant';
 
 @Injectable()
 export class RefreshTokenService {
-
   private _read;
   private _write;
 
@@ -25,8 +24,8 @@ export class RefreshTokenService {
     private configService: ConfigService,
     private userService: UserService,
   ) {
-    this._read = this.prisma.replica
-    this._write = this.prisma.master
+    this._read = this.prisma.replica;
+    this._write = this.prisma.master;
   }
 
   public async createRefreshToken(userId: string, deviceInfo: DeviceInfo) {
@@ -98,7 +97,7 @@ export class RefreshTokenService {
     return {
       token: newToken,
       id: token.id,
-      deviceId
+      deviceId,
     };
   }
 
@@ -205,5 +204,31 @@ export class RefreshTokenService {
     const browser = info.userAgent?.split('/')[0]?.trim() || 'Unknown';
 
     return `${deviceName}-${browser}`;
+  }
+  public async cleanUp(olderThanDays: number = 30): Promise<{ deletedCount: number }> {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
+
+      const result = await this.prisma.master.refreshToken.deleteMany({
+        where: {
+          isRevoked: true,
+          updatedAt: { lt: cutoffDate },
+        },
+      });
+
+      const expiredResult = await this.prisma.master.refreshToken.deleteMany({
+        where: {
+          expiresAt: { lt: new Date() },
+          isRevoked: false,
+        },
+      });
+
+      const totalDeleted = result.count + expiredResult.count;
+
+      return { deletedCount: totalDeleted };
+    } catch (error) {
+      throw new InternalServerErrorException('Internal Server Error (RefreshToken<CleanUp>) ❌.');
+    }
   }
 }
