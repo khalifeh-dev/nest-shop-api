@@ -15,6 +15,7 @@ import { pick } from 'lodash';
 import { SanitizeUser } from '../../common/types/user.type';
 import { CloudinaryService } from '../../common/services/cloudinary/cloudinary.service';
 import { UserAction, UserStatus } from '../../common/constants/user.constant';
+import { FindAllUserDto } from './dto/find-all.dto';
 
 @Injectable()
 export class UserService {
@@ -52,32 +53,44 @@ export class UserService {
     }
   }
 
-  public async findAll(
-    limit: number = 20,
-    page: number = 1,
-  ): Promise<FindAll<SanitizeUser>> {
+  public async findAll(dto: FindAllUserDto): Promise<FindAll<SanitizeUser>> {
     try {
+      const {
+        limit = 20,
+        page = 1,
+        search,
+        email,
+        firstName,
+        lastName,
+        userName,
+        userStatus,
+        deletedBy,
+        isDeleted,
+      } = dto;
+
       const finalLimit = Math.min(Math.max(limit, 1), 50);
       const skip = (page - 1) * finalLimit;
 
+      const where = this.buildWhereClause({
+        search,
+        email,
+        firstName,
+        lastName,
+        userName,
+        userStatus,
+        deletedBy,
+        isDeleted,
+      });
+
       const [data, total] = await Promise.all([
         this._read.user.findMany({
+          where,
           skip,
           take: finalLimit,
           orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
-            avatar: true,
-            bio: true,
-            userName: true,
-            lastLoginAt: true,
-            userStatus: true,
-          },
+          select: this.getUserSelectFields(),
         }),
-        this._read.user.count(),
+        this._read.user.count({ where }),
       ]);
 
       const totalPages = Math.ceil(total / finalLimit);
@@ -481,5 +494,72 @@ export class UserService {
       where: { id: userId },
       data: { userStatus: status },
     });
+  }
+
+  private buildWhereClause(filters: {
+    search?: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    userName?: string;
+    userStatus?: string;
+    deletedBy?: string;
+    isDeleted?: boolean;
+  }): Prisma.UserWhereInput {
+    const where: Prisma.UserWhereInput = {};
+
+    const exactFilters: Record<string, any> = {
+      email: filters.email,
+      firstName: filters.firstName,
+      lastName: filters.lastName,
+      userName: filters.userName,
+      userStatus: filters.userStatus,
+      deletedBy: filters.deletedBy,
+      isDeleted: filters.isDeleted,
+    };
+
+    Object.entries(exactFilters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        if (
+          key === 'userStatus' ||
+          key === 'isDeleted' ||
+          key === 'deletedBy'
+        ) {
+          where[key] = value;
+        } else {
+          where[key] = { contains: value, mode: 'insensitive' };
+        }
+      }
+    });
+
+    const searchTerm = filters.search?.trim();
+    if (searchTerm) {
+      where.OR = [
+        { email: { contains: searchTerm, mode: 'insensitive' } },
+        { firstName: { contains: searchTerm, mode: 'insensitive' } },
+        { lastName: { contains: searchTerm, mode: 'insensitive' } },
+        { userName: { contains: searchTerm, mode: 'insensitive' } },
+        { id: searchTerm },
+      ];
+    }
+
+    return where;
+  }
+
+  private getUserSelectFields() {
+    return {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      avatar: true,
+      bio: true,
+      userName: true,
+      lastLoginAt: true,
+      userStatus: true,
+      isDeleted: true,
+      deletedAt: true,
+      deletedBy: true,
+    };
   }
 }

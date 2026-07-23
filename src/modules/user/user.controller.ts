@@ -30,6 +30,7 @@ import { SanitizeUser } from '../../common/types/user.type';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UserAction } from '../../common/constants/user.constant';
 import { RefreshTokenService } from '../refresh-token/refresh-token.service';
+import { FindAllUserDto } from './dto/find-all.dto';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -52,14 +53,18 @@ export class UserController {
   @ApiOperation({ summary: 'Get all users with pagination' })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'search', required: false, type: String, example: "" })
+  @ApiQuery({ name: 'email', required: false, type: String, example: "" })
+  @ApiQuery({ name: 'firstName', required: false, type: String, example: "" })
+  @ApiQuery({ name: 'lastName', required: false, type: String, example: "" })
+  @ApiQuery({ name: 'userName', required: false, type: String, example: "" })
+  @ApiQuery({ name: 'userStatus', required: false, type: String, example: "" })
+  @ApiQuery({ name: 'deletedBy', required: false, type: String, example: "" })
+  @ApiQuery({ name: 'isDeleted', required: false, type: String, example: "" })
   public async findAll(
-    @Query('limit') limit?: string,
-    @Query('page') page?: string,
+    @Query() dto: FindAllUserDto
   ): Promise<Pagination<SanitizeUser>> {
-    const data = await this.userService.findAll(
-      limit ? +limit : 20,
-      page ? +page : 1,
-    );
+    const data = await this.userService.findAll(dto);
 
     const { data: allData, limit: lim, page: pg, total, pages } = data;
 
