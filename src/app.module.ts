@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { DatabaseModule } from './common/database/database.module';
 import { EncryptionModule } from './common/services/encryption/encryption.module';
 import { UserModule } from './modules/user/user.module';
@@ -19,6 +19,7 @@ import { LoggerService } from './common/services/logger/logger.service';
 import { PinoLoggerService } from './common/services/logger/pino/pino.service';
 import { TasksModule } from './common/tasks/tasks.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { BullModule } from "@nestjs/bull"
 
 @Module({
   imports: [
@@ -50,6 +51,27 @@ import { ScheduleModule } from '@nestjs/schedule';
     }),
 
     ScheduleModule.forRoot(),
+
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        redis: {
+          host: configService.get('REDIS_HOST', 'localhost'),
+          port: configService.get('REDIS_PORT', 6379),
+          password: configService.get('REDIS_PASSWORD'),
+        },
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 5000,
+          },
+          removeOnComplete: true,
+          removeOnFail: false,
+        },
+      }),
+    }),
 
     // Internal Custom Module
     LoggerModule.forRoot({

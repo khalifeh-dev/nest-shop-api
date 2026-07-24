@@ -26,6 +26,7 @@ import { UserService } from '../user/user.service';
 import { DatabaseService } from '../../common/database/database.service';
 import { Throttle } from '@nestjs/throttler';
 import { VerifyCodeType } from '../../common/constants/auth.constant';
+import { EmailService } from '../../common/services/email/email.service';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -40,6 +41,7 @@ export class AuthController {
     private userService: UserService,
     private verifyCode: VerifyCodeService,
     private refreshTokenService: RefreshTokenService,
+    private emailService: EmailService,
   ) {
     this.RESEND_COOLDOWN = process.env.RESEND_COOLDOWN;
     this.CODE_EXPIRY = process.env.CODE_EXPIRY;
@@ -62,6 +64,14 @@ export class AuthController {
     });
 
     this.setAuthCookies(res, tokens);
+
+    this.emailService.sendWelcome({
+      to: dto.email,
+      subject: '💖 Welcome to Our Platform',
+      name: dto.firstName,
+      companyName: 'khalifeh shop',
+      year: 2026,
+    });
 
     return {
       user,
@@ -166,7 +176,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   public async forgetPassword(@Body() dto: ForgetPasswordDto) {
     await this.userService.findOneByEmail(dto.email);
-    return await this.verifyCode.sendVerifyCode(dto.email, VerifyCodeType.PASSWORD_RESET);
+    return await this.verifyCode.sendVerifyCode(
+      dto.email,
+      VerifyCodeType.PASSWORD_RESET,
+    );
   }
 
   @Post('verify-reset-code')
@@ -212,8 +225,10 @@ export class AuthController {
       },
     });
 
-    return await this.verifyCode.sendVerifyCode(dto.email, VerifyCodeType.EMAIL_VERIFICATION)
-
+    return await this.verifyCode.sendVerifyCode(
+      dto.email,
+      VerifyCodeType.EMAIL_VERIFICATION,
+    );
   }
 
   private clearAuthCookies(res: Response) {
@@ -257,9 +272,7 @@ export class AuthController {
         const remainingTime = Math.ceil(
           this.RESEND_COOLDOWN - timeSinceLastRequest,
         );
-        throw new BadRequestException(
-          `Please Wait To ${remainingTime}`,
-        );
+        throw new BadRequestException(`Please Wait To ${remainingTime}`);
       }
     }
   }
@@ -278,7 +291,7 @@ export class AuthController {
 
     if (count >= this.MAX_ATTEMPTS_PER_DAY) {
       throw new BadRequestException(
-        `You have exceeded the allowed number of code requests. Please try again later.`
+        `You have exceeded the allowed number of code requests. Please try again later.`,
       );
     }
   }

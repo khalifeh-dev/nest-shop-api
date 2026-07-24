@@ -47,7 +47,6 @@ export class AuthService {
     };
 
     const createUser = await this.userService.create(userData);
-    this.logger.info(`User Created ✅`)
 
     const { id, firstName, lastName, email, userName } = createUser;
 

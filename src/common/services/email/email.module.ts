@@ -3,12 +3,20 @@ import { EmailService } from './email.service';
 import { TemplateService } from './template.service';
 import { ResendProvider } from './providers/resend.provider';
 import { NodemailerProvider } from './providers/nodemailer.provider';
+import { BullModule } from '@nestjs/bull';
+import { SendEmailProcessor } from './processors/send-email.processor';
 
 @Global()
 @Module({
+  imports: [
+    BullModule.registerQueue({
+      name: 'email-queue',
+    }),
+  ],
   providers: [
     EmailService,
     TemplateService,
+    SendEmailProcessor,
     {
       provide: 'EmailProvider',
       useFactory: () => {

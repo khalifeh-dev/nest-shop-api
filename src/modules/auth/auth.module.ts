@@ -10,6 +10,7 @@ import { JwtRefreshStrategy } from '../../common/strategies/jwt.refresh.strategy
 import { RefreshTokenModule } from '../refresh-token/refresh-token.module';
 import { EncryptionModule } from '../../common/services/encryption/encryption.module';
 import { VerifyCodeModule } from '../../common/services/verify-code/verify-code.module';
+import { EmailModule } from '../../common/services/email/email.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { VerifyCodeModule } from '../../common/services/verify-code/verify-code.
     PassportModule,
     EncryptionModule,
     VerifyCodeModule,
+    EmailModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
