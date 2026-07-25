@@ -43,6 +43,35 @@ enum VerifyCodeType {
   PASSWORD_RESET
 }
 
+enum NotificationType {
+  ORDER
+  PAYMENT
+  SHIPPING
+  DELIVERY
+  MARKETING
+  PROMOTION
+  SYSTEM
+  SECURITY
+  REMINDER
+  WELCOME
+}
+
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  CANCELLED  
+}
+
 //! <----------------------------------------<< Moldes >>---------------------------------------->
 
 //? <----------------------- User ----------------------->
@@ -71,9 +100,11 @@ model User {
 
   lastLoginAt   DateTime?
 
-  refreshTokens RefreshToken[]
-  images        UserImage[]
-  verifyCodes        verifyCode[]
+  refreshTokens    RefreshToken[]
+  images           UserImage[]
+  verifyCodes      verifyCode[]
+  notifications    Notification[]
+  userNotifications    UserNotification[]
 }
 
 
@@ -157,4 +188,64 @@ model verifyCode {
   @@index([code])
   @@index([expiresAt])
   @@map("verify_code")
+}
+
+//? <----------------------- Notification ----------------------->
+model Notification {
+  id       String    @id @default(cuid())
+  userId   String    @map("user_id")
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title    String
+  message  String
+  content  Json?
+
+  type      NotificationType
+  priority  NotificationPriority
+
+  status    NotificationStatus
+
+  isBroadcast  Boolean @default(false)
+  targetAudience String?
+
+  scheduledFor DateTime?
+  sentAt DateTime?
+  deliveredAt  DateTime?
+
+  icon          String? 
+  link          String?
+  
+  metadata      Json?  
+
+  orderId  String?    @map("order_id")
+  // order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String?    @map("product_id")
+  // product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  userNotifications UserNotification[]
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+//? <----------------------- User Notification ----------------------->
+model UserNotification {
+  id       String    @id @default(cuid())
+  userId   String    @map("user_id")
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notificationId String 
+  notification    Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  isRead   Boolean    @default(false)
+  readAt   DateTime?
+  isDismissedAt DateTime?
+  deliveredAt DateTime @default(now())
+
+  @@index([userId, notificationId])
+  @@index([userId, isRead])
 }
