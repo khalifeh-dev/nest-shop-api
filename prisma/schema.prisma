@@ -101,6 +101,7 @@ model User {
   lastLoginAt   DateTime?
 
   refreshTokens    RefreshToken[]
+  roles    UserRole[]
   images           UserImage[]
   verifyCodes      verifyCode[]
   notifications    Notification[]
@@ -205,11 +206,11 @@ model Notification {
 
   status    NotificationStatus
 
-  isBroadcast  Boolean @default(false)
+  isBroadcast    Boolean @default(false)
   targetAudience String?
 
   scheduledFor DateTime?
-  sentAt DateTime?
+  sentAt       DateTime?
   deliveredAt  DateTime?
 
   icon          String? 
@@ -217,7 +218,7 @@ model Notification {
   
   metadata      Json?  
 
-  orderId  String?    @map("order_id")
+  orderId   String?    @map("order_id")
   // order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId String?    @map("product_id")
   // product               @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -235,17 +236,102 @@ model Notification {
 
 //? <----------------------- User Notification ----------------------->
 model UserNotification {
-  id       String    @id @default(cuid())
-  userId   String    @map("user_id")
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   notificationId String 
   notification    Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
 
-  isRead   Boolean    @default(false)
-  readAt   DateTime?
+  isRead        Boolean    @default(false)
+  readAt        DateTime?
   isDismissedAt DateTime?
-  deliveredAt DateTime @default(now())
+  deliveredAt   DateTime @default(now())
 
   @@index([userId, notificationId])
   @@index([userId, isRead])
+}
+
+//? <----------------------- Permission Group ----------------------->
+model PermissionGroup {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  description String?
+  icon        String? 
+  permissions Permission[]
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("permission_groups")
+}
+
+//? <----------------------- Permission ----------------------->
+model Permission {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  resource    String  
+  action      String 
+  description String?
+  isActive    Boolean     @default(true)
+  
+  groupId     String?     @map("group_id")
+  group       PermissionGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  
+  roles       RolePermission[]
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+//? <----------------------- Role ----------------------->
+model Role {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  description String?
+  scope       String? 
+  isActive    Boolean     @default(true)
+  isDefault   Boolean     @default(false)
+  
+  users       UserRole[]
+  permissions RolePermission[]
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("roles")
+}
+
+//? <----------------------- Role Permission ----------------------->
+model RolePermission {
+  roleId       String   @map("role_id")
+  permissionId String   @map("permission_id")
+  priority     Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  
+  role         Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+//? <----------------------- User Role ----------------------->
+model UserRole {
+  userId    String   @map("user_id")
+  roleId    String   @map("role_id")
+  scope     String?
+  grantedBy String?  @map("granted_by")
+  grantedAt DateTime @default(now()) @map("granted_at")
+  expiresAt DateTime? @map("expires_at")
+  isActive  Boolean  @default(true)
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
 }
