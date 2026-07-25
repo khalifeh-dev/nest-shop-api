@@ -13,7 +13,7 @@ import { AuthService } from './auth.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
 import { DeviceInfo } from '../../common/types/device-info.type';
 import type { Request, Response } from 'express';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DeviceUtil } from '../../common/utils/device.util';
 import { SignInDto } from './dto/sign-in.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -27,8 +27,10 @@ import { DatabaseService } from '../../common/database/database.service';
 import { Throttle } from '@nestjs/throttler';
 import { VerifyCodeType } from '../../common/constants/auth.constant';
 import { EmailService } from '../../common/services/email/email.service';
+import { Public } from "../../common/decorators/public.decorator"
 
 @ApiTags('Auth')
+@ApiBearerAuth()
 @Controller('auth')
 export class AuthController {
   private readonly RESEND_COOLDOWN;
@@ -48,6 +50,7 @@ export class AuthController {
     this.MAX_ATTEMPTS_PER_DAY = process.env.MAX_ATTEMPTS_PER_DAY;
   }
 
+  @Public()
   @Post('sign-up')
   @ApiOperation({ summary: 'Register a user' })
   @HttpCode(HttpStatus.CREATED)
@@ -80,6 +83,7 @@ export class AuthController {
     };
   }
 
+  @Public()
   @Post('sign-in')
   @ApiOperation({ summary: 'Login a user' })
   @HttpCode(HttpStatus.CREATED)

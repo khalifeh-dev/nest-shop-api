@@ -20,6 +20,7 @@ import { PinoLoggerService } from './common/services/logger/pino/pino.service';
 import { TasksModule } from './common/tasks/tasks.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from "@nestjs/bull"
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
   imports: [
@@ -106,6 +107,10 @@ import { BullModule } from "@nestjs/bull"
     {
       provide: LoggerService,
       useClass: PinoLoggerService,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
     },
   ],
 })
