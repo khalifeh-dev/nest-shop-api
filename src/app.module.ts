@@ -21,6 +21,7 @@ import { TasksModule } from './common/tasks/tasks.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from "@nestjs/bull"
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { NotificationModule } from './common/services/notification/notification.module';
 
 @Module({
   imports: [
@@ -96,6 +97,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     EmailModule,
     VerifyCodeModule,
     TasksModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [
