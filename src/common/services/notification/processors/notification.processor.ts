@@ -26,4 +26,28 @@ export class NotificationProcessor {
       throw error;
     }
   }
+
+  @Process('send-broadcast-batch')
+  async handleBroadcastBatch(job: Job) {
+    const { userIds } = job.data;
+
+    try {
+      const results = await Promise.allSettled(
+        userIds.map(async (userId: string) => {
+          try {
+            return { userId, success: true };
+          } catch (error: any) {
+            return { userId, success: false, error: error?.message };
+          }
+        }),
+      );
+
+      const successful = results.filter((r) => r.status === 'fulfilled').length;
+      const failed = results.filter((r) => r.status === 'rejected').length;
+
+      return { success: true, successful, failed };
+    } catch (error) {
+      throw error;
+    }
+  }
 }

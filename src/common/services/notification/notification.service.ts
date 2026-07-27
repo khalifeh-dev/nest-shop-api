@@ -12,14 +12,18 @@ import {
   NotificationPriority,
   NotificationStatus,
   NotificationType,
+  Roles,
+  UserStatus,
 } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
 import { type Queue } from 'bull';
+import { NotificationOptions } from '../../types/notification.type';
 
 @Injectable()
 export class NotificationService {
   private _read;
   private _write;
+  private readonly BATCH_SIZE = 1000;
 
   constructor(
     private prisma: DatabaseService,
@@ -115,7 +119,7 @@ export class NotificationService {
     }
   }
 
-  public async send(notificationId: string, userId: string) {
+  public async sendNotification(notificationId: string, userId: string) {
     try {
       await this.userService.secureFindOne(userId);
       const notification = await this.findOneNotification(notificationId);
@@ -205,6 +209,93 @@ export class NotificationService {
     }
   }
 
+  public async sendBroadcast(
+    notificationId: string,
+    options?: NotificationOptions,
+  ) {
+    try {
+      const notification = await this.findOneNotification(notificationId);
+
+      if (!notification.isBroadcast)
+        throw new BadRequestException(
+          'This is a simple notification; use the (sendNotification) method.',
+        );
+      if (notification.status === NotificationStatus.SENT)
+        throw new BadRequestException('This notification has been sent.');
+
+      const targetAudience =
+        options?.targetAudience || notification.targetAudience || 'ALL';
+      const customUserIds = options?.customUserIds || [];
+      const batchSize = options?.batchSize || this.BATCH_SIZE;
+
+      const userIds = await this.getTargetUserIds(
+        targetAudience,
+        customUserIds,
+      );
+
+      if (userIds.length === 0)
+        throw new BadRequestException('There are no users to send to.');
+
+      await this._write.notification.update({
+        where: { id: notificationId },
+        data: {
+          status: NotificationStatus.SENT,
+          sentAt: new Date(),
+          totalRecipients: userIds.length,
+        },
+      });
+
+      const userNotificationData = userIds.map((userId) => ({
+        userId,
+        notificationId,
+        deliveredAt: new Date(),
+      }));
+
+      await this._write.userNotification.createMany({
+        data: userNotificationData,
+        skipDuplicates: true,
+      });
+
+      const batches = this.chunkArray(userIds, batchSize);
+
+      for (const [index, batch] of batches.entries()) {
+        await this.notificationQueue.add(
+          'send-broadcast-batch',
+          {
+            notificationId: notificationId,
+            userIds: batch,
+            batchNumber: index + 1,
+            totalBatches: batches.length,
+            title: notification.title,
+            message: notification.message,
+            data: notification.content,
+            link: notification.link,
+          },
+          {
+            attempts: 3,
+            backoff: {
+              type: 'exponential',
+              delay: 5000,
+            },
+            removeOnComplete: true,
+            removeOnFail: false,
+            priority: 10,
+          },
+        );
+      }
+
+      return {
+        success: true,
+        message: `Broadcast notification successfully added to the queue (${userIds.length} users)`,
+        totalRecipients: userIds.length,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      if (error instanceof BadRequestException) return error;
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
   private async getTotalRecipients(targetAudience?: string): Promise<number> {
     const where: any = { isDeleted: false };
 
@@ -224,4 +315,47 @@ export class NotificationService {
   }
 
   private async queueNotificationForSending(notificationId: string) {}
+
+  private async getTargetUserIds(
+    targetAudience: 'ALL' | 'ACTIVE_USERS' | 'INACTIVE_USERS' | 'ADMINS',
+    customUserIds: string[],
+  ): Promise<string[]> {
+    try {
+      if (customUserIds.length > 0) return customUserIds;
+
+      const where: any = {
+        isDeleted: false,
+        userStatus: UserStatus.ACTIVE,
+      };
+
+      if (targetAudience === 'ACTIVE_USERS') {
+        where.lastLoginAt = {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+        };
+      } else if (targetAudience === 'INACTIVE_USERS') {
+        where.lastLoginAt = {
+          lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+        };
+      } else if (targetAudience === 'ADMINS') {
+        where.role = { in: ['ADMIN', 'SUPER_ADMIN'] };
+      }
+
+      const users = await this._read.user.findMany({
+        where,
+        select: { id: true },
+      });
+
+      return users.map((user) => user.id);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  private chunkArray<T>(array: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < array.length; i += size) {
+      chunks.push(array.slice(i, i + size));
+    }
+    return chunks;
+  }
 }
