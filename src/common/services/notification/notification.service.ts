@@ -381,95 +381,182 @@ export class NotificationService {
   }
 
   public async dismissNotification(userId: string, notificationId: string) {
-    await this.userService.secureFindOne(userId);
+    try {
+      await this.userService.secureFindOne(userId);
 
-    const userNotification =
-      await this.prisma.replica.userNotification.findFirst({
-        where: {
-          userId,
-          notificationId,
-          isDismissed: false,
+      const userNotification =
+        await this.prisma.replica.userNotification.findFirst({
+          where: {
+            userId,
+            notificationId,
+            isDismissed: false,
+          },
+        });
+
+      if (!userNotification) {
+        throw new NotFoundException(
+          'Notification not found or already dismissed',
+        );
+      }
+
+      await this.prisma.master.userNotification.update({
+        where: { id: userNotification.id },
+        data: {
+          isDismissed: true,
+          dismissedAt: new Date(),
         },
       });
-
-    if (!userNotification) {
-      throw new NotFoundException(
-        'Notification not found or already dismissed',
-      );
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      throw new InternalServerErrorException('Internal Server Error.');
     }
-
-    await this.prisma.master.userNotification.update({
-      where: { id: userNotification.id },
-      data: {
-        isDismissed: true,
-        dismissedAt: new Date(),
-      },
-    });
   }
 
   public async dismissAllNotifications(userId: string) {
-    await this.userService.secureFindOne(userId);
-  
-    const result = await this.prisma.master.userNotification.updateMany({
-      where: {
-        userId,
-        isDismissed: false,
-      },
-      data: {
-        isDismissed: true,
-        dismissedAt: new Date(),
-      },
-    });
+    try {
+      await this.userService.secureFindOne(userId);
 
-    return {
-      count: result.count,
-      message: `${result.count} notifications dismissed`,
-    };
-  }
-
-  public async dismissOldNotifications(userId: string, days: number = 30) {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
-
-    const result = await this.prisma.master.userNotification.updateMany({
-      where: {
-        userId,
-        isDismissed: false,
-        deliveredAt: { lt: cutoffDate },
-      },
-      data: {
-        isDismissed: true,
-        dismissedAt: new Date(),
-      },
-    });
-
-    return {
-      count: result.count,
-      message: `${result.count} old notifications dismissed`,
-    };
-  }
-
-  public async undismissNotification(userId: string, notificationId: string) {
-    const userNotification =
-      await this.prisma.replica.userNotification.findFirst({
+      const result = await this.prisma.master.userNotification.updateMany({
         where: {
           userId,
-          notificationId,
+          isDismissed: false,
+        },
+        data: {
           isDismissed: true,
+          dismissedAt: new Date(),
         },
       });
 
-    if (!userNotification) {
-      throw new NotFoundException('Notification not found or not dismissed');
+      return {
+        count: result.count,
+        message: `${result.count} notifications dismissed`,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      throw new InternalServerErrorException('Internal Server Error.');
     }
+  }
 
-    await this.prisma.master.userNotification.update({
-      where: { id: userNotification.id },
-      data: {
-        isDismissed: false,
-        dismissedAt: null,
-      },
-    });
+  public async dismissOldNotifications(userId: string, days: number = 30) {
+    try {
+      await this.userService.secureFindOne(userId);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+
+      const result = await this.prisma.master.userNotification.updateMany({
+        where: {
+          userId,
+          isDismissed: false,
+          deliveredAt: { lt: cutoffDate },
+        },
+        data: {
+          isDismissed: true,
+          dismissedAt: new Date(),
+        },
+      });
+
+      return {
+        count: result.count,
+        message: `${result.count} old notifications dismissed`,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async undismissNotification(userId: string, notificationId: string) {
+    try {
+      await this.userService.secureFindOne(userId);
+      const userNotification =
+        await this.prisma.replica.userNotification.findFirst({
+          where: {
+            userId,
+            notificationId,
+            isDismissed: true,
+          },
+        });
+
+      if (!userNotification) {
+        throw new NotFoundException('Notification not found or not dismissed');
+      }
+
+      await this.prisma.master.userNotification.update({
+        where: { id: userNotification.id },
+        data: {
+          isDismissed: false,
+          dismissedAt: null,
+        },
+      });
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async markAsRead(userId: string, notificationId: string) {
+    try {
+      await this.userService.secureFindOne(userId);
+
+      const userNotification =
+        await this.prisma.master.userNotification.findFirst({
+          where: {
+            userId,
+            notificationId,
+            isRead: false,
+          },
+        });
+
+      if (!userNotification) {
+        throw new NotFoundException(
+          'Notification not found or already marked as read',
+        );
+      }
+
+      await this.prisma.master.userNotification.update({
+        where: { id: userNotification.id },
+        data: {
+          isRead: true,
+          readAt: new Date(),
+        },
+      });
+
+      return {
+        message: 'Notification marked as read successfully',
+        notificationId,
+        readAt: new Date(),
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async markAllAsRead(userId: string) {
+    try {
+      await this.userService.secureFindOne(userId);
+
+      const result = await this.prisma.master.userNotification.updateMany({
+        where: {
+          userId,
+          isRead: false,
+        },
+        data: {
+          isRead: true,
+          readAt: new Date(),
+        },
+      });
+
+      return {
+        message: result.count === 0 
+          ? 'No unread notifications found' 
+          : `${result.count} notifications marked as read`,
+        count: result.count,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
   }
 
   private async getTotalRecipients(targetAudience?: string): Promise<number> {
