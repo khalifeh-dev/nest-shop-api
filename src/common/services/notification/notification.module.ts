@@ -7,7 +7,7 @@ import { BullModule } from '@nestjs/bull';
   imports: [
     UserModule,
     BullModule.registerQueue({
-      name: 'email-queue',
+      name: 'notification-queue',
     }),
   ],
   providers: [NotificationService],

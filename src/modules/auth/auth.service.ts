@@ -20,7 +20,6 @@ import type { LoggerService } from '../../common/services/logger/logger-options.
 
 @Injectable()
 export class AuthService {
-
   private _read;
   private _write;
 
@@ -31,10 +30,10 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private encryption: EncryptionService,
-    @Inject('LoggerService') private logger: LoggerService
+    @Inject('LoggerService') private logger: LoggerService,
   ) {
-    this._read = this.prisma.replica
-    this._write = this.prisma.master
+    this._read = this.prisma.replica;
+    this._write = this.prisma.master;
   }
 
   public async signUp(dto: SignUpDto & DeviceDto) {
@@ -84,8 +83,8 @@ export class AuthService {
         refreshToken: refreshToken.token,
       },
       deviceInfo: {
-        deviceId: refreshToken.deviceId
-      }
+        deviceId: refreshToken.deviceId,
+      },
     };
   }
 
@@ -95,6 +94,12 @@ export class AuthService {
     if (findUser.userStatus !== UserStatus.ACTIVE) {
       throw new UnauthorizedException(
         'Your Account Is Inactive Or Ban. Please Contact Support.',
+      );
+    }
+
+    if (!findUser.password) {
+      throw new UnauthorizedException(
+        'This account uses social login (Google, GitHub, etc.). Please use that method to sign in.',
       );
     }
 
@@ -142,13 +147,13 @@ export class AuthService {
         refreshToken: refreshToken.token,
       },
       deviceInfo: {
-        deviceId: refreshToken.deviceId
-      }
+        deviceId: refreshToken.deviceId,
+      },
     };
   }
 
   public async signOut(userId: string, deviceId?: string) {
-    await this.userService.secureFindOne(userId)
+    await this.userService.secureFindOne(userId);
 
     if (deviceId) {
       return await this.refreshTokenService.revokeToken(userId, deviceId);
@@ -191,19 +196,16 @@ export class AuthService {
   }
 
   public async signOutDevice(userId: string, deviceId?: string) {
-    await this.userService.secureFindOne(userId)
+    await this.userService.secureFindOne(userId);
     if (!deviceId) throw new BadRequestException('Device ID is required');
 
     return await this.refreshTokenService.revokeToken(userId, deviceId);
   }
 
-  //! Fix Use Transcation Bug !// 
-  public async refresh(
-    providedRefreshToken: string,
-    deviceDto: DeviceDto,
-  ) {
+  //! Fix Use Transcation Bug !//
+  public async refresh(providedRefreshToken: string, deviceDto: DeviceDto) {
     let payload;
-    const deviceId = this.refreshTokenService.generateDeviceId(deviceDto)
+    const deviceId = this.refreshTokenService.generateDeviceId(deviceDto);
 
     try {
       payload = this.jwtService.verify(providedRefreshToken, {
