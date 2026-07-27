@@ -296,6 +296,90 @@ export class NotificationService {
     }
   }
 
+  public async scheduleNotification(
+    notificationId: string,
+    scheduledFor: Date | string,
+  ) {
+    try {
+      const scheduledDate =
+        typeof scheduledFor === 'string'
+          ? new Date(scheduledFor)
+          : scheduledFor;
+
+      if (isNaN(scheduledDate.getTime()))
+        throw new BadRequestException('The entered date format is invalid.');
+
+      const notification = await this.findOneNotification(notificationId);
+
+      const minDelay = 900_000; // 15 Minute
+      const now = new Date();
+
+      if (scheduledDate.getTime() - now.getTime() < minDelay) {
+        throw new BadRequestException(
+          `The scheduled time must be at least ${minDelay / 60000} minutes in the future.`,
+        );
+      }
+
+      if (notification.status === NotificationStatus.SENT) {
+        throw new BadRequestException(
+          'This notification has already been sent.',
+        );
+      }
+
+      if (notification.status === NotificationStatus.CANCELLED) {
+        throw new BadRequestException('This notification has been cancelled.');
+      }
+
+      await this._write.notification.update({
+        where: { id: notificationId },
+        data: {
+          status: NotificationStatus.SCHEDULED,
+          scheduledFor: scheduledDate,
+        },
+      });
+
+      const delay = scheduledDate.getTime() - Date.now();
+
+      const job = await this.notificationQueue.add(
+        'send-scheduled-notification',
+        {
+          notificationId: notificationId,
+          userId: notification.userId,
+          isBroadcast: notification.isBroadcast,
+          targetAudience: notification.targetAudience,
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          data: notification.content,
+          link: notification.link,
+          scheduledFor: scheduledDate.toISOString(),
+        },
+        {
+          delay: delay,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 5000,
+          },
+          removeOnComplete: true,
+          removeOnFail: false,
+          priority: 5,
+        },
+      );
+
+      return {
+        success: true,
+        message: `Notification successfully scheduled for ${scheduledDate.toLocaleString('fa-IR')}`,
+        scheduledFor: scheduledDate,
+        jobId: job.id,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      if (error instanceof BadRequestException) return error;
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
   private async getTotalRecipients(targetAudience?: string): Promise<number> {
     const where: any = { isDeleted: false };
 
