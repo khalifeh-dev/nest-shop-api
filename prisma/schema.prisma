@@ -78,6 +78,7 @@ enum AuthProvider {
   GOOGLE
   APPLE
   GITHUB
+  LOCAL
 }
 
 //! <----------------------------------------<< Moldes >>---------------------------------------->
@@ -90,8 +91,13 @@ model User {
   lastName  String
   userName  String?  @unique
   password  String?
-  provider  AuthProvider
-  providerId String?
+
+  isVerified Boolean @default(false)
+  provider   AuthProvider @default(LOCAL)
+  googleId   String? @unique @map("google_id")
+  githubId   String? @unique @map("github_id")
+  appleId    String? @unique @map("apple_id")
+  
   avatar    String?
   bio       String?
 
