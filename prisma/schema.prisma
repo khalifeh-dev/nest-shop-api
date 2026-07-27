@@ -254,7 +254,8 @@ model UserNotification {
 
   isRead        Boolean    @default(false)
   readAt        DateTime?
-  isDismissedAt DateTime?
+  isDismissed  Boolean  @default(false) @map("is_dismissed")
+  dismissedAt  DateTime? @map("dismissed_at")
   deliveredAt   DateTime @default(now())
 
   @@index([userId, notificationId])

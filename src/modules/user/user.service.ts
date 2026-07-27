@@ -494,148 +494,86 @@ export class UserService {
     userId: string,
     filters?: GetUserNotificationsDto,
   ) {
-    try {
-      await this.secureFindOne(userId);
+    await this.secureFindOne(userId);
 
-      const {
-        limit = 20,
-        page = 1,
-        type,
-        priority,
-        isRead,
-        isBroadcast,
-        fromDate,
-        toDate,
-        search,
-        sortBy = 'createdAt',
-        sortOrder = 'desc',
-      } = filters || {};
+    const { limit = 20, page = 1, ...rest } = filters || {};
+    const finalLimit = Math.min(Math.max(limit, 1), 50);
+    const skip = (page - 1) * finalLimit;
 
-      const finalLimit = Math.min(Math.max(limit, 1), 50);
-      const skip = (page - 1) * finalLimit;
+    const where = this.buildNotificationWhereClause(userId, rest);
 
-      const where = this.buildNotificationWhereClause(userId, {
-        type,
-        priority,
-        isRead,
-        isBroadcast,
-        fromDate,
-        toDate,
-        search,
-      });
-
-      const [notifications, totalCount, unreadCount, userNotifsForStats] =
-        await Promise.all([
-          this.prisma.replica.userNotification.findMany({
-            where,
-            skip,
-            take: finalLimit,
-            orderBy: {
-              [sortBy === 'createdAt' ? 'createdAt' : 'deliveredAt']: sortOrder,
-            },
-            include: {
-              notification: {
-                select: {
-                  id: true,
-                  title: true,
-                  message: true,
-                  content: true,
-                  type: true,
-                  priority: true,
-                  isBroadcast: true,
-                  link: true,
-                  icon: true,
-                  sentAt: true,
-                  createdAt: true,
-                },
-              },
-            },
-          }),
-          this.prisma.replica.userNotification.count({
-            where: { userId },
-          }),
-          this.prisma.replica.userNotification.count({
-            where: {
-              userId,
-              isRead: false,
-            },
-          }),
-          this.prisma.replica.userNotification.findMany({
-            where: {
-              userId,
-              notification: {
-                status: 'SENT',
-              },
-            },
+    const [notifications, totalCount, unreadCount] = await Promise.all([
+      this.prisma.replica.userNotification.findMany({
+        where,
+        skip,
+        take: finalLimit,
+        orderBy: {
+          [rest.sortBy === 'createdAt' ? 'createdAt' : 'deliveredAt']:
+            rest.sortOrder || 'desc',
+        },
+        include: {
+          notification: {
             select: {
-              notification: {
-                select: {
-                  priority: true,
-                },
-              },
+              id: true,
+              title: true,
+              message: true,
+              content: true,
+              type: true,
+              priority: true,
+              isBroadcast: true,
+              link: true,
+              icon: true,
+              sentAt: true,
+              createdAt: true,
             },
-          }),
-        ]);
-
-      const priorityMap = new Map<string, number>();
-      userNotifsForStats.forEach((item) => {
-        const priority = item.notification?.priority || 'UNKNOWN';
-        priorityMap.set(priority, (priorityMap.get(priority) || 0) + 1);
-      });
-
-      const priorityCounts = Array.from(priorityMap.entries()).map(
-        ([priority, count]) => ({
-          priority,
-          count,
-        }),
-      );
-
-      const formattedNotifications = notifications.map(({ id, deliveredAt, isDismissedAt, isRead, notification, notificationId, readAt, userId }) => ({
-        id,
-        userId,
-        isRead,
-        readAt,
-        deliveredAt,
-        isDismissedAt,
-        notification: {
-          id: notification.id,
-          title: notification.title,
-          message: notification.message,
-          content: notification.content,
-          type: notification.type,
-          priority: notification.priority,
-          isBroadcast: notification.isBroadcast,
-          link: notification.link,
-          icon: notification.icon,
-          sentAt: notification.sentAt,
-          createdAt: notification.createdAt,
+          },
         },
-      }));
+      }),
+      this.prisma.replica.userNotification.count({ where: { userId } }),
+      this.prisma.replica.userNotification.count({
+        where: { userId, isRead: false },
+      }),
+    ]);
 
-      const totalPages = Math.ceil(
-        (await this.prisma.replica.userNotification.count({ where })) /
-          finalLimit,
-      );
+    const priorityCounts = await this.getUserNotificationStats(userId);
 
-      return {
-        data: formattedNotifications,
-        pagination: {
-          limit: finalLimit,
-          page,
-          pages: totalPages,
-          total: formattedNotifications.length,
-        },
-        stats: {
-          totalCount,
-          unreadCount,
-          readCount: totalCount - unreadCount,
-          priorityCounts,
-        },
-      };
-    } catch (error) {
-      if (error instanceof NotFoundException) throw error;
-      throw new InternalServerErrorException('Internal Server Error.');
-    }
+    return {
+      data: notifications.map((n) => ({
+        ...pick(n, [
+          'id',
+          'userId',
+          'isRead',
+          'readAt',
+          'deliveredAt',
+          'isDismissedAt',
+        ]),
+        notification: pick(n.notification, [
+          'id',
+          'title',
+          'message',
+          'content',
+          'type',
+          'priority',
+          'isBroadcast',
+          'link',
+          'icon',
+          'sentAt',
+          'createdAt',
+        ]),
+      })),
+      pagination: {
+        limit: finalLimit,
+        page,
+        pages: Math.ceil(totalCount / finalLimit),
+        total: totalCount,
+      },
+      stats: {
+        totalCount,
+        unreadCount,
+        readCount: totalCount - unreadCount,
+        priorityCounts,
+      },
+    };
   }
 
   public async getUserNotificationStats(userId: string) {

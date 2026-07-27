@@ -380,6 +380,98 @@ export class NotificationService {
     }
   }
 
+  public async dismissNotification(userId: string, notificationId: string) {
+    await this.userService.secureFindOne(userId);
+
+    const userNotification =
+      await this.prisma.replica.userNotification.findFirst({
+        where: {
+          userId,
+          notificationId,
+          isDismissed: false,
+        },
+      });
+
+    if (!userNotification) {
+      throw new NotFoundException(
+        'Notification not found or already dismissed',
+      );
+    }
+
+    await this.prisma.master.userNotification.update({
+      where: { id: userNotification.id },
+      data: {
+        isDismissed: true,
+        dismissedAt: new Date(),
+      },
+    });
+  }
+
+  public async dismissAllNotifications(userId: string) {
+    await this.userService.secureFindOne(userId);
+  
+    const result = await this.prisma.master.userNotification.updateMany({
+      where: {
+        userId,
+        isDismissed: false,
+      },
+      data: {
+        isDismissed: true,
+        dismissedAt: new Date(),
+      },
+    });
+
+    return {
+      count: result.count,
+      message: `${result.count} notifications dismissed`,
+    };
+  }
+
+  public async dismissOldNotifications(userId: string, days: number = 30) {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+
+    const result = await this.prisma.master.userNotification.updateMany({
+      where: {
+        userId,
+        isDismissed: false,
+        deliveredAt: { lt: cutoffDate },
+      },
+      data: {
+        isDismissed: true,
+        dismissedAt: new Date(),
+      },
+    });
+
+    return {
+      count: result.count,
+      message: `${result.count} old notifications dismissed`,
+    };
+  }
+
+  public async undismissNotification(userId: string, notificationId: string) {
+    const userNotification =
+      await this.prisma.replica.userNotification.findFirst({
+        where: {
+          userId,
+          notificationId,
+          isDismissed: true,
+        },
+      });
+
+    if (!userNotification) {
+      throw new NotFoundException('Notification not found or not dismissed');
+    }
+
+    await this.prisma.master.userNotification.update({
+      where: { id: userNotification.id },
+      data: {
+        isDismissed: false,
+        dismissedAt: null,
+      },
+    });
+  }
+
   private async getTotalRecipients(targetAudience?: string): Promise<number> {
     const where: any = { isDeleted: false };
 
