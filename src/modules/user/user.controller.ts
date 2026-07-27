@@ -31,6 +31,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { UserAction } from '../../common/constants/user.constant';
 import { RefreshTokenService } from '../refresh-token/refresh-token.service';
 import { FindAllUserDto } from './dto/find-all.dto';
+import { GetUserNotificationsDto } from '../../common/services/notification/dto';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { NotificationPriority } from '@prisma/client';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -53,16 +56,16 @@ export class UserController {
   @ApiOperation({ summary: 'Get all users with pagination' })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
-  @ApiQuery({ name: 'search', required: false, type: String, example: "" })
-  @ApiQuery({ name: 'email', required: false, type: String, example: "" })
-  @ApiQuery({ name: 'firstName', required: false, type: String, example: "" })
-  @ApiQuery({ name: 'lastName', required: false, type: String, example: "" })
-  @ApiQuery({ name: 'userName', required: false, type: String, example: "" })
-  @ApiQuery({ name: 'userStatus', required: false, type: String, example: "" })
-  @ApiQuery({ name: 'deletedBy', required: false, type: String, example: "" })
-  @ApiQuery({ name: 'isDeleted', required: false, type: String, example: "" })
+  @ApiQuery({ name: 'search', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'email', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'firstName', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'lastName', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'userName', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'userStatus', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'deletedBy', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'isDeleted', required: false, type: String, example: '' })
   public async findAll(
-    @Query() dto: FindAllUserDto
+    @Query() dto: FindAllUserDto,
   ): Promise<Pagination<SanitizeUser>> {
     const data = await this.userService.findAll(dto);
 
@@ -127,50 +130,51 @@ export class UserController {
   })
   @HttpCode(HttpStatus.CREATED)
   public async uploadAvatar(
-    @Request() req,
+    @CurrentUser('sub') userId: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    req.user = { id: 'cmrewdsc20000d8v3clokr3ak' };
-    return await this.userService.uploadAvatar(file, req?.user.id);
+    return await this.userService.uploadAvatar(file, userId);
   }
 
   @Delete('remove_avatar')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove user avatar' })
-  public async removeAvatar(@Request() req) {
-    req.user = { id: 'cmrewdsc20000d8v3clokr3ak' };
-    return this.userService.removeAvatar(req.user.id);
+  public async removeAvatar(@CurrentUser('sub') userId: string) {
+    return this.userService.removeAvatar(userId);
   }
 
   @Get('user_images')
   @ApiOperation({ summary: 'Get user all images' })
   @HttpCode(HttpStatus.OK)
-  public async getUserImages(@Request() req) {
-    return await this.userService.getUserImages(req.user.id);
+  public async getUserImages(@CurrentUser('sub') userId: string) {
+    return await this.userService.getUserImages(userId);
   }
 
   @Get('user_devices')
   @ApiOperation({ summary: 'Get user all devices' })
   @HttpCode(HttpStatus.OK)
-  public async getUserDevices(@Request() req) {
-    return await this.userService.getUserDevices(req?.user.id);
+  public async getUserDevices(@CurrentUser('sub') userId: string) {
+    return await this.userService.getUserDevices(userId);
   }
 
   @Get('user_devices/:deviceId')
   @ApiOperation({ summary: 'Get all user images' })
   @HttpCode(HttpStatus.OK)
   public async getDevicesDetails(
-    @Request() req,
+    @CurrentUser('sub') userId: string,
     @Param('deviceId') deviceId: string,
   ) {
-    return await this.userService.getDeviceDetails(req?.user.id, deviceId);
+    return await this.userService.getDeviceDetails(userId, deviceId);
   }
 
   @Delete('account/delete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove user account' })
-  public async softDeleteMyAccount(@Request() req, @Body() reason?: string) {
-    return await this.userService.softDeleteUser(req?.user.id, reason);
+  public async softDeleteMyAccount(
+    @CurrentUser('sub') userId: string,
+    @Body() reason?: string,
+  ) {
+    return await this.userService.softDeleteUser(userId, reason);
   }
 
   @Delete('user_account/delete/:userId')
@@ -188,8 +192,8 @@ export class UserController {
   @Patch('account/restore')
   @ApiOperation({ summary: 'restore user' })
   @HttpCode(HttpStatus.OK)
-  public async restoreMyAccount(@Request() req) {
-    return await this.userService.restoreUser(req?.user.id);
+  public async restoreMyAccount(@CurrentUser('sub') userId: string) {
+    return await this.userService.restoreUser(userId);
   }
 
   @Get('user_account/in_active/:userId')
@@ -207,5 +211,33 @@ export class UserController {
   public async banUser(@Param('userId') userId: string) {
     await this.refreshTokenService.revokeAllTokensByDevice(userId);
     return await this.userService.banUser(userId);
+  }
+
+  @Get('user-notifications')
+  @ApiOperation({ summary: 'Get User Notifications' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'search', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'isRead', required: false, type: Boolean, example: false })
+  @ApiQuery({ name: 'priority', required: false, type: String, example: NotificationPriority.MEDIUM })
+  @ApiQuery({ name: 'fromDate', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'toDate', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'isBroadcast', required: false, type: Boolean, example: false })
+  @ApiQuery({ name: 'type', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, example: 'createdAt' })
+  @ApiQuery({ name: 'sortOrder', required: false, type: String, example: 'desc' })
+  @HttpCode(HttpStatus.OK)
+  async getMyNotifications(
+    @CurrentUser('sub') userId: string,
+    @Query() filters: GetUserNotificationsDto,
+  ) {
+    return this.userService.getUserNotifications(userId, filters);
+  }
+
+  @Get('me/stats')
+  @ApiOperation({ summary: 'Get User Notifications Stats' })
+  @HttpCode(HttpStatus.OK)
+  async getMyNotificationStats(@CurrentUser('sub') userId: string) {
+    return this.userService.getUserNotificationStats(userId);
   }
 }

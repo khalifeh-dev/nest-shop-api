@@ -5,9 +5,12 @@ import {
   IsBoolean,
   IsString,
   Length,
+  IsEnum,
+  IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+import { NotificationPriority } from '@prisma/client';
 
 export class GetUserNotificationsDto {
   @ApiProperty({ example: 20, description: 'Limit' })
@@ -29,15 +32,47 @@ export class GetUserNotificationsDto {
   @IsBoolean()
   isRead?: boolean;
 
+  @ApiProperty({
+    example: NotificationPriority.MEDIUM,
+    description: 'Priority',
+  })
+  @IsOptional()
+  @IsEnum(NotificationPriority)
+  priority?: NotificationPriority;
+
+  @ApiProperty({
+    example: '',
+    description: 'Form Date',
+  })
+  @IsOptional()
+  @IsDateString()
+  fromDate?: string;
+
+  @ApiProperty({
+    example: '',
+    description: 'To Date',
+  })
+  @IsOptional()
+  @IsDateString()
+  toDate?: string;
+
+  @ApiProperty({
+    example: '',
+    description: 'Search',
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiProperty({ example: false, description: 'Is Broadcast' })
+  @IsOptional()
+  @IsBoolean()
+  isBroadcast?: boolean;
+
   @ApiProperty({ example: '', description: 'Type' })
   @IsOptional()
   @IsString()
   type?: string;
-
-  @ApiProperty({ example: '', description: 'Priority' })
-  @IsOptional()
-  @IsString()
-  priority?: string;
 
   @ApiProperty({ example: '', description: 'Sort By' })
   @IsOptional()

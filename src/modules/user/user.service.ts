@@ -16,6 +16,7 @@ import { SanitizeUser } from '../../common/types/user.type';
 import { CloudinaryService } from '../../common/services/cloudinary/cloudinary.service';
 import { UserAction, UserStatus } from '../../common/constants/user.constant';
 import { FindAllUserDto } from './dto/find-all.dto';
+import { GetUserNotificationsDto } from '../../common/services/notification/dto';
 
 @Injectable()
 export class UserService {
@@ -489,6 +490,178 @@ export class UserService {
     }
   }
 
+  public async getUserNotifications(
+    userId: string,
+    filters?: GetUserNotificationsDto,
+  ) {
+    try {
+      await this.secureFindOne(userId);
+
+      const {
+        limit = 20,
+        page = 1,
+        type,
+        priority,
+        isRead,
+        isBroadcast,
+        fromDate,
+        toDate,
+        search,
+        sortBy = 'createdAt',
+        sortOrder = 'desc',
+      } = filters || {};
+
+      const finalLimit = Math.min(Math.max(limit, 1), 50);
+      const skip = (page - 1) * finalLimit;
+
+      const where = this.buildNotificationWhereClause(userId, {
+        type,
+        priority,
+        isRead,
+        isBroadcast,
+        fromDate,
+        toDate,
+        search,
+      });
+
+      const [notifications, totalCount, unreadCount, userNotifsForStats] =
+        await Promise.all([
+          this.prisma.replica.userNotification.findMany({
+            where,
+            skip,
+            take: finalLimit,
+            orderBy: {
+              [sortBy === 'createdAt' ? 'createdAt' : 'deliveredAt']: sortOrder,
+            },
+            include: {
+              notification: {
+                select: {
+                  id: true,
+                  title: true,
+                  message: true,
+                  content: true,
+                  type: true,
+                  priority: true,
+                  isBroadcast: true,
+                  link: true,
+                  icon: true,
+                  sentAt: true,
+                  createdAt: true,
+                },
+              },
+            },
+          }),
+          this.prisma.replica.userNotification.count({
+            where: { userId },
+          }),
+          this.prisma.replica.userNotification.count({
+            where: {
+              userId,
+              isRead: false,
+            },
+          }),
+          this.prisma.replica.userNotification.findMany({
+            where: {
+              userId,
+              notification: {
+                status: 'SENT',
+              },
+            },
+            select: {
+              notification: {
+                select: {
+                  priority: true,
+                },
+              },
+            },
+          }),
+        ]);
+
+      const priorityMap = new Map<string, number>();
+      userNotifsForStats.forEach((item) => {
+        const priority = item.notification?.priority || 'UNKNOWN';
+        priorityMap.set(priority, (priorityMap.get(priority) || 0) + 1);
+      });
+
+      const priorityCounts = Array.from(priorityMap.entries()).map(
+        ([priority, count]) => ({
+          priority,
+          count,
+        }),
+      );
+
+      const formattedNotifications = notifications.map(({ id, deliveredAt, isDismissedAt, isRead, notification, notificationId, readAt, userId }) => ({
+        id,
+        userId,
+        isRead,
+        readAt,
+        deliveredAt,
+        isDismissedAt,
+        notification: {
+          id: notification.id,
+          title: notification.title,
+          message: notification.message,
+          content: notification.content,
+          type: notification.type,
+          priority: notification.priority,
+          isBroadcast: notification.isBroadcast,
+          link: notification.link,
+          icon: notification.icon,
+          sentAt: notification.sentAt,
+          createdAt: notification.createdAt,
+        },
+      }));
+
+      const totalPages = Math.ceil(
+        (await this.prisma.replica.userNotification.count({ where })) /
+          finalLimit,
+      );
+
+      return {
+        data: formattedNotifications,
+        pagination: {
+          limit: finalLimit,
+          page,
+          pages: totalPages,
+          total: formattedNotifications.length,
+        },
+        stats: {
+          totalCount,
+          unreadCount,
+          readCount: totalCount - unreadCount,
+          priorityCounts,
+        },
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async getUserNotificationStats(userId: string) {
+    try {
+      const [total, unread] = await Promise.all([
+        this.prisma.replica.userNotification.count({
+          where: { userId },
+        }),
+        this.prisma.replica.userNotification.count({
+          where: {
+            userId,
+            isRead: false,
+          },
+        }),
+      ]);
+
+      return {
+        total,
+        unread,
+        read: total - unread,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
   private async updateUserStatus(userId: string, status: UserStatus) {
     return await this._write.user.update({
       where: { id: userId },
@@ -561,5 +734,50 @@ export class UserService {
       deletedAt: true,
       deletedBy: true,
     };
+  }
+
+  private buildNotificationWhereClause(
+    userId: string,
+    filters: GetUserNotificationsDto,
+  ): any {
+    const { type, priority, isRead, isBroadcast, fromDate, toDate, search } =
+      filters;
+
+    const where: any = {
+      userId,
+      notification: {
+        status: 'SENT',
+      },
+    };
+
+    const notificationFilters = {
+      ...(type && { type }),
+      ...(priority && { priority }),
+      ...(isBroadcast !== undefined && { isBroadcast }),
+    };
+
+    if (Object.keys(notificationFilters).length > 0) {
+      where.notification = { ...where.notification, ...notificationFilters };
+    }
+
+    if (isRead !== undefined) {
+      where.isRead = isRead;
+    }
+
+    if (fromDate || toDate) {
+      where.deliveredAt = {
+        ...(fromDate && { gte: new Date(fromDate) }),
+        ...(toDate && { lte: new Date(toDate) }),
+      };
+    }
+
+    if (search?.trim()) {
+      where.notification.OR = [
+        { title: { contains: search.trim(), mode: 'insensitive' } },
+        { message: { contains: search.trim(), mode: 'insensitive' } },
+      ];
+    }
+
+    return where;
   }
 }
