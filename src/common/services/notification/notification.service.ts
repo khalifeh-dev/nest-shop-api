@@ -13,6 +13,8 @@ import {
   NotificationStatus,
   NotificationType,
 } from '@prisma/client';
+import { InjectQueue } from '@nestjs/bull';
+import { type Queue } from 'bull';
 
 @Injectable()
 export class NotificationService {
@@ -23,6 +25,7 @@ export class NotificationService {
     private prisma: DatabaseService,
     private userService: UserService,
     private configService: ConfigService,
+    @InjectQueue('notification-queue') private notificationQueue: Queue,
   ) {
     this._read = this.prisma.replica;
     this._write = this.prisma.master;
@@ -112,7 +115,95 @@ export class NotificationService {
     }
   }
 
-  
+  public async send(notificationId: string, userId: string) {
+    try {
+      await this.userService.secureFindOne(userId);
+      const notification = await this.findOneNotification(notificationId);
+
+      if (notification.isBroadcast)
+        throw new BadRequestException(
+          'This is a broadcast notification; use the (sendBroadcast) method.',
+        );
+      if (notification.userId && notification.userId !== userId)
+        throw new BadRequestException(
+          'This notification was created for another user.',
+        );
+      if (notification.status === NotificationStatus.SENT)
+        throw new BadRequestException(
+          'This notification has already been sent.',
+        );
+      if (notification.status === NotificationStatus.CANCELLED)
+        throw new BadRequestException('This notification has been cancelled.');
+
+      await this._write.notification.update({
+        where: { id: notificationId },
+        data: {
+          status: NotificationStatus.SENT,
+          sentAt: new Date(),
+          ...(notification.userId === null && { userId: userId }),
+        },
+      });
+
+      await this.prisma.master.userNotification.create({
+        data: {
+          userId: userId,
+          notificationId: notificationId,
+          deliveredAt: new Date(),
+        },
+      });
+
+      await this.notificationQueue.add(
+        'send-notification',
+        {
+          notificationId: notificationId,
+          userId: userId,
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          data: notification.content,
+          link: notification.link,
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 5000,
+          },
+          removeOnComplete: true,
+          removeOnFail: false,
+        },
+      );
+
+      return {
+        success: true,
+        message:
+          'The notification was successfully added to the sending queue.',
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      if (error instanceof BadRequestException) return error;
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async findOneNotification(notificationId: string) {
+    try {
+      const notification = await this._read.notification.findUnique({
+        where: { id: notificationId },
+        include: { user: true },
+      });
+
+      if (!notification)
+        throw new NotFoundException(
+          `Notification Not Found With ID ${notificationId} .`,
+        );
+
+      return notification;
+    } catch (error) {
+      if (error instanceof NotFoundException) return error;
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
 
   private async getTotalRecipients(targetAudience?: string): Promise<number> {
     const where: any = { isDeleted: false };
