@@ -11,12 +11,13 @@ import { UserService } from '../user/user.service';
 import { RefreshTokenService } from '../refresh-token/refresh-token.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { RefreshToken, UserStatus } from '@prisma/client';
+import { AuthProvider, RefreshToken, UserStatus } from '@prisma/client';
 import { SignInDto } from './dto/sign-in.dto';
 import { EncryptionService } from '../../common/services/encryption/encryption.service';
 import { DeviceDto } from './dto/device.dto';
 import { LogOut } from '../../common/constants/auth.constant';
 import type { LoggerService } from '../../common/services/logger/logger-options.interface';
+import { OAuthUser } from '../../common/types/oauth.type';
 
 @Injectable()
 export class AuthService {
@@ -292,5 +293,97 @@ export class AuthService {
       accessToken: newAccessToken,
       refreshToken: result.token,
     };
+  }
+
+  public async OAuth(dto: OAuthUser, deviceInfo: DeviceDto) {
+    let user = await this.findOAuthUser(dto);
+
+    if (!user) {
+      user = await this.createOAuthUser(dto);
+    }
+
+    const refreshToken = await this.refreshTokenService.createRefreshToken(
+      user.id,
+      deviceInfo,
+    );
+
+    await this.userService.updateRefreshToken(user.id, refreshToken.id);
+
+    const payload = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      userName: user.userName,
+      // role: user.role,
+    };
+
+    const accessToken = this.jwtService.sign(payload, {
+      secret: this.configService.get('JWT_ACCESS_SECRET_KEY'),
+      expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION') || '15m',
+    });
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        userName: user.userName,
+        avatar: user.avatar,
+        bio: user.bio,
+      },
+      tokens: {
+        accessToken,
+        refreshToken: refreshToken.token,
+      },
+    };
+  }
+
+  private async findOAuthUser(oAuthUser: OAuthUser) {
+    const where: any = {};
+
+    if (oAuthUser.googleId) {
+      where.googleId = oAuthUser.googleId;
+    } else if (oAuthUser.githubId) {
+      where.githubId = oAuthUser.githubId;
+    } else if (oAuthUser.appleId) {
+      where.appleId = oAuthUser.appleId;
+    } else {
+      where.email = oAuthUser.email;
+    }
+
+    return this.prisma.replica.user.findFirst({
+      where,
+    });
+  }
+
+  private async createOAuthUser(oAuthUser: OAuthUser) {
+    const userName = this.generateUserName(
+      oAuthUser.firstName,
+      oAuthUser.lastName,
+    );
+
+    return this.prisma.master.user.create({
+      data: {
+        email: oAuthUser.email,
+        firstName: oAuthUser.firstName,
+        lastName: oAuthUser.lastName,
+        userName,
+        avatar: oAuthUser.avatar,
+        googleId: oAuthUser.googleId,
+        githubId: oAuthUser.githubId,
+        appleId: oAuthUser.appleId,
+        isVerified: oAuthUser.isVerified,
+        userStatus: 'ACTIVE',
+        password: null,
+      },
+    });
+  }
+
+  private generateUserName(firstName: string, lastName: string): string {
+    const base = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`;
+    const random = Math.floor(Math.random() * 10000);
+    return `${base}${random}`;
   }
 }

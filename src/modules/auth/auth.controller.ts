@@ -2,12 +2,14 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
@@ -27,7 +29,9 @@ import { DatabaseService } from '../../common/database/database.service';
 import { Throttle } from '@nestjs/throttler';
 import { VerifyCodeType } from '../../common/constants/auth.constant';
 import { EmailService } from '../../common/services/email/email.service';
-import { Public } from "../../common/decorators/public.decorator"
+import { Public } from '../../common/decorators/public.decorator';
+import { AuthGuard } from '@nestjs/passport';
+import { OAuthUser } from '../../common/types/oauth.type';
 
 @ApiTags('Auth')
 @ApiBearerAuth()
@@ -233,6 +237,59 @@ export class AuthController {
       dto.email,
       VerifyCodeType.EMAIL_VERIFICATION,
     );
+  }
+
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  @ApiOperation({ summary: 'Login with Google' })
+  public async googleAuth() {}
+
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  @ApiOperation({ summary: 'Google callback' })
+  public async googleAuthRedirect(@Req() req, @Res() res) {
+    return this.handleOAuthRedirect(req, res);
+  }
+
+  @Get('github')
+  @UseGuards(AuthGuard('github'))
+  @ApiOperation({ summary: 'Login with GitHub' })
+  public async githubAuth() {}
+
+  @Get('github/callback')
+  @UseGuards(AuthGuard('github'))
+  @ApiOperation({ summary: 'GitHub callback' })
+  public async githubAuthRedirect(@Req() req, @Res() res) {
+    return this.handleOAuthRedirect(req, res);
+  }
+
+  @Get('apple')
+  @UseGuards(AuthGuard('apple'))
+  @ApiOperation({ summary: 'Login with Apple' })
+  public async appleAuth() {}
+
+  @Get('apple/callback')
+  @UseGuards(AuthGuard('apple'))
+  @ApiOperation({ summary: 'Apple callback' })
+  public async appleAuthRedirect(@Req() req, @Res() res) {
+    return this.handleOAuthRedirect(req, res);
+  }
+
+  private async handleOAuthRedirect(
+    @Req() req: Request & { user: OAuthUser },
+    @Res() res: Response,
+  ) {
+    const oAuthUser = req.user;
+    const deviceInfo = DeviceUtil.extractDeviceInfo(req);
+    const result = await this.authService.OAuth(oAuthUser, deviceInfo);
+
+    this.setAuthCookies(res, {
+      accessToken: result.tokens.accessToken,
+      refreshToken: result.tokens.refreshToken,
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return res.redirect(`${frontendUrl}/auth/callback?success=true`);
   }
 
   private clearAuthCookies(res: Response) {
