@@ -4,15 +4,21 @@ import { CleanUpJob } from './jobs/clean-up.job';
 
 @Injectable()
 export class TasksService {
+
   constructor(private cleanUpJob: CleanUpJob) {}
 
-  @Cron('0 0 1 * *')
+  @Cron("0 0 1 * *")
   public async cleanRefreshTokens() {
-    const result = await this.cleanUpJob.cleanUpRefreshTokens();
+    return await this.cleanUpJob.cleanUpRefreshTokens();
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  public async cleanUpVerifyCodes () {
-    const result = await this.cleanUpJob.cleanUpVerifyCode();
+  public async cleanUpVerifyCodes() {
+    return await this.cleanUpJob.cleanUpVerifyCode();
+  }
+
+  @Cron("0 0 1 * *")
+  public async cleanupNotifications() {
+    return await this.cleanUpJob.cleanUpNotifications();
   }
 }

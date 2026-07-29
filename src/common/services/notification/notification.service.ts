@@ -16,6 +16,7 @@ import { InjectQueue } from '@nestjs/bull';
 import { type Queue } from 'bull';
 import { NotificationOptions } from '../../types/notification.type';
 import { pick } from 'lodash';
+import { CleanUpResult } from '../../types/notification-cleanup.type';
 
 @Injectable()
 export class NotificationService {
@@ -512,6 +513,222 @@ export class NotificationService {
       if (error instanceof NotFoundException) return error;
       throw new InternalServerErrorException('Internal Server Error.');
     }
+  }
+
+  public async removeAllOldNotifications(days: number = 30) {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+
+      const count = await this.prisma.replica.notification.count();
+
+      if (count === 0) {
+        return {
+          message: 'No old notifications to delete',
+          count: 0,
+        };
+      }
+
+      const result = await this.prisma.master.notification.deleteMany({
+        where: {
+          deletedAt: { lt: cutoffDate },
+        },
+      });
+
+      return {
+        message: `${result.count} old notifications deleted successfully`,
+        count: result.count,
+        cutoffDate,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async removeAllDismissedNotifications(days: number = 7) {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+
+      const result = await this.prisma.master.userNotification.deleteMany({
+        where: {
+          isDismissed: true,
+          dismissedAt: { lt: cutoffDate },
+        },
+      });
+
+      return {
+        message: `${result.count} dismissed notifications deleted`,
+        count: result.count,
+        cutoffDate,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async removeDismissedNotificationsBatch(
+    days: number = 7,
+    batchSize: number = 1000,
+  ) {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+
+      let totalDeleted = 0;
+      let hasMore = true;
+      const startTime = Date.now();
+
+      while (hasMore) {
+        const ids = await this.prisma.master.userNotification.findMany({
+          where: {
+            isDismissed: true,
+            dismissedAt: { lt: cutoffDate },
+          },
+          select: { id: true },
+          take: batchSize,
+        });
+
+        if (ids.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        const result = await this.prisma.master.userNotification.deleteMany({
+          where: {
+            id: { in: ids.map((item) => item.id) },
+          },
+        });
+
+        totalDeleted += result.count;
+
+        if (ids.length < batchSize) {
+          hasMore = false;
+        }
+      }
+
+      const duration = Date.now() - startTime;
+
+      return {
+        message: `${totalDeleted} dismissed notifications deleted in batches`,
+        count: totalDeleted,
+        duration: `${duration}ms`,
+        cutoffDate,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async removeOldNotificationsBatch(
+    days: number = 30,
+    batchSize: number = 1000,
+  ) {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+
+      let totalDeleted = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const ids = await this.prisma.master.notification.findMany({
+          where: {
+            deletedAt: { lt: cutoffDate },
+          },
+          select: { id: true },
+          take: batchSize,
+        });
+
+        if (ids.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        const result = await this.prisma.master.notification.deleteMany({
+          where: {
+            id: { in: ids.map((item) => item.id) },
+          },
+        });
+
+        totalDeleted += result.count;
+        if (ids.length < batchSize) {
+          hasMore = false;
+        }
+      }
+
+      return {
+        message: `${totalDeleted} old notifications deleted in batches`,
+        count: totalDeleted,
+        cutoffDate,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async removeOldNotificationsSmartStructured(
+    days: number = 30,
+  ): Promise<CleanUpResult> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    const startTime = Date.now();
+
+    const BATCH_THRESHOLD = 5000;
+
+    const [notificationsCount, userNotificationsCount] = await Promise.all([
+      this.prisma.master.notification.count({
+        where: { deletedAt: { lt: cutoffDate } },
+      }),
+      this.prisma.master.userNotification.count({
+        where: {
+          isDismissed: true,
+          dismissedAt: { lt: cutoffDate },
+        },
+      }),
+    ]);
+
+    const notificationsMethod =
+      notificationsCount > BATCH_THRESHOLD ? 'batch' : 'normal';
+    const userNotificationsMethod =
+      userNotificationsCount > BATCH_THRESHOLD ? 'batch' : 'normal';
+
+    const [notificationsResult, userNotificationsResult] = await Promise.all([
+      notificationsCount > 0
+        ? notificationsMethod === 'batch'
+          ? this.removeOldNotificationsBatch(days)
+          : this.removeAllOldNotifications(days)
+        : Promise.resolve({ count: 0, message: 'No notifications to delete' }),
+
+      userNotificationsCount > 0
+        ? userNotificationsMethod === 'batch'
+          ? this.removeDismissedNotificationsBatch(days)
+          : this.removeAllDismissedNotifications(days)
+        : Promise.resolve({
+            count: 0,
+            message: 'No user notifications to delete',
+          }),
+    ]);
+
+    const duration = Date.now() - startTime;
+
+    return {
+      notifications: {
+        count: notificationsResult.count || 0,
+        method: notificationsMethod,
+        message: notificationsResult.message || 'No notifications to delete',
+      },
+      userNotifications: {
+        count: userNotificationsResult.count || 0,
+        method: userNotificationsMethod,
+        message:
+          userNotificationsResult.message || 'No user notifications to delete',
+      },
+      totalCount:
+        (notificationsResult.count || 0) + (userNotificationsResult.count || 0),
+      cutoffDate,
+      duration: `${duration}ms`,
+    };
   }
 
   public async dismissOldNotifications(userId: string, days: number = 30) {

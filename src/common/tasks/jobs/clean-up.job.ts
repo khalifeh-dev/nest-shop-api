@@ -1,19 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { RefreshTokenService } from '../../../modules/refresh-token/refresh-token.service';
 import { VerifyCodeService } from '../../services/verify-code/verify-code.service';
+import { NotificationService } from '../../services/notification/notification.service';
 
 @Injectable()
 export class CleanUpJob {
   constructor(
     private refreshTokenService: RefreshTokenService,
-    private verifyCodeService: VerifyCodeService
+    private verifyCodeService: VerifyCodeService,
+    private notificationService: NotificationService,
   ) {}
 
   public async cleanUpRefreshTokens() {
-    return await this.refreshTokenService.cleanUp(30);
+    await this.refreshTokenService.cleanUp(30);
+    return true;
   }
 
-  public async cleanUpVerifyCode () {
-    return await this.verifyCodeService.cleanUpExpiredCodes(7)
+  public async cleanUpVerifyCode() {
+    await this.verifyCodeService.cleanUpExpiredCodes(7);
+    return true;
+  }
+
+  public async cleanUpNotifications() {
+    await this.notificationService.removeOldNotificationsSmartStructured(30);
+    return true;
   }
 }
