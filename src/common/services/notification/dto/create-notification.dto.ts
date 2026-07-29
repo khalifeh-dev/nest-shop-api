@@ -85,7 +85,7 @@ export class CreateNotificationDto {
 
   @ApiProperty({ example: NotificationStatus.PENDING, description: 'Status' })
   @IsOptional()
-  @IsEnum(NotificationStatus)
+  @IsEnum(NotificationStatus) 
   @Transform(({ value }) => value.trim())
   status?: NotificationStatus = NotificationStatus.PENDING;
 

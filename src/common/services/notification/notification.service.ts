@@ -6,18 +6,16 @@ import {
 } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { UserService } from '../../../modules/user/user.service';
-import { CreateNotificationDto } from './dto';
-import { ConfigService } from '@nestjs/config';
+import { CreateNotificationDto, UpdateNotificationsDto } from './dto';
 import {
   NotificationPriority,
   NotificationStatus,
-  NotificationType,
-  Roles,
   UserStatus,
 } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
 import { type Queue } from 'bull';
 import { NotificationOptions } from '../../types/notification.type';
+import { pick } from 'lodash';
 
 @Injectable()
 export class NotificationService {
@@ -28,7 +26,6 @@ export class NotificationService {
   constructor(
     private prisma: DatabaseService,
     private userService: UserService,
-    private configService: ConfigService,
     @InjectQueue('notification-queue') private notificationQueue: Queue,
   ) {
     this._read = this.prisma.replica;
@@ -201,6 +198,9 @@ export class NotificationService {
         throw new NotFoundException(
           `Notification Not Found With ID ${notificationId} .`,
         );
+
+      if (!notification.isActive)
+        throw new NotFoundException(`Notification Is'nt Active.`);
 
       return notification;
     } catch (error) {
@@ -380,6 +380,83 @@ export class NotificationService {
     }
   }
 
+  public async update(notificationId: string, dto: UpdateNotificationsDto) {
+    try {
+      await this.findOneNotification(notificationId);
+
+      const allowedFields = [
+        'status',
+        'title',
+        'content',
+        'targetAudience',
+        'scheduledFor',
+        'link',
+        'icon',
+      ];
+      const updateData = pick(dto, allowedFields);
+
+      if (Object.keys(updateData).length === 0) {
+        throw new BadRequestException('No valid fields to update');
+      }
+
+      if (dto.scheduledFor && new Date(dto.scheduledFor) < new Date()) {
+        throw new BadRequestException('Scheduled time must be in the future');
+      }
+
+      const updatedData = await this.prisma.master.notification.update({
+        where: { id: notificationId },
+        data: updateData,
+      });
+
+      return updatedData;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException) throw error;
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async cancel(notificationId: string) {
+    return await this.update(notificationId, {
+      status: NotificationStatus.CANCELLED,
+    });
+  }
+
+  public async remove(notificationId: string) {
+    try {
+      await this.findOneNotification(notificationId);
+
+      const remove = await this.prisma.master.notification.delete({
+        where: { id: notificationId },
+      });
+
+      return remove;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async softDelete(notificationId: string) {
+    try {
+      await this.findOneNotification(notificationId);
+
+      const remove = await this.prisma.master.notification.update({
+        where: { id: notificationId },
+        data: {
+          deletedAt: new Date(),
+          isActive: false,
+        },
+      });
+
+      return remove;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException) throw error;
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
   public async dismissNotification(userId: string, notificationId: string) {
     try {
       await this.userService.secureFindOne(userId);
@@ -548,9 +625,10 @@ export class NotificationService {
       });
 
       return {
-        message: result.count === 0 
-          ? 'No unread notifications found' 
-          : `${result.count} notifications marked as read`,
+        message:
+          result.count === 0
+            ? 'No unread notifications found'
+            : `${result.count} notifications marked as read`,
         count: result.count,
       };
     } catch (error) {

@@ -231,6 +231,9 @@ model Notification {
 
   icon          String? 
   link          String?
+
+  deletedAt     DateTime?
+  isActive      Boolean @default(true)
   
   metadata      Json?  
 
