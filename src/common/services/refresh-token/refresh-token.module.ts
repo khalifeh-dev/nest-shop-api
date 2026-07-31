@@ -1,9 +1,9 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { RefreshTokenService } from './refresh-token.service';
 import { RefreshTokenController } from './refresh-token.controller';
-import { EncryptionModule } from '../../common/services/encryption/encryption.module';
-import { UserModule } from '../user/user.module';
-import { AuthModule } from '../auth/auth.module';
+import { EncryptionModule } from '../encryption/encryption.module';
+import { UserModule } from '../../../modules/user/user.module';
+import { AuthModule } from '../../../modules/auth/auth.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 

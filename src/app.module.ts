@@ -7,7 +7,7 @@ import { EncryptionModule } from './common/services/encryption/encryption.module
 import { UserModule } from './modules/user/user.module';
 import { CloudinaryModule } from './common/services/cloudinary/cloudinary.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { RefreshTokenModule } from './modules/refresh-token/refresh-token.module';
+import { RefreshTokenModule } from './common/services/refresh-token/refresh-token.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { Redis } from 'ioredis';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';

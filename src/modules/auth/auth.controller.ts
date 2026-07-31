@@ -23,7 +23,7 @@ import { VerifyCodeService } from '../../common/services/verify-code/verify-code
 import { ForgetPasswordDto } from './dto/forget-password.dto';
 import { resetPasswordDto } from './dto/reset-password.dto';
 import { VerifyCodeDto } from './dto/verify-code.dto';
-import { RefreshTokenService } from '../refresh-token/refresh-token.service';
+import { RefreshTokenService } from '../../common/services/refresh-token/refresh-token.service';
 import { UserService } from '../user/user.service';
 import { DatabaseService } from '../../common/database/database.service';
 import { Throttle } from '@nestjs/throttler';

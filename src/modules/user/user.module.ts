@@ -3,7 +3,7 @@ import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { EncryptionModule } from '../../common/services/encryption/encryption.module';
 import { CloudinaryModule } from '../../common/services/cloudinary/cloudinary.module';
-import { RefreshTokenModule } from '../refresh-token/refresh-token.module';
+import { RefreshTokenModule } from '../../common/services/refresh-token/refresh-token.module';
 
 @Module({
   imports: [EncryptionModule, forwardRef(() => RefreshTokenModule), CloudinaryModule],

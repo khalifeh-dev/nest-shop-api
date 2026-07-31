@@ -29,7 +29,7 @@ import { Pagination } from '../../common/types/pagination.type';
 import { SanitizeUser } from '../../common/types/user.type';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UserAction } from '../../common/constants/user.constant';
-import { RefreshTokenService } from '../refresh-token/refresh-token.service';
+import { RefreshTokenService } from '../../common/services/refresh-token/refresh-token.service';
 import { FindAllUserDto } from './dto/find-all.dto';
 import { GetUserNotificationsDto } from '../../common/services/notification/dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { RefreshTokenService } from '../../../modules/refresh-token/refresh-token.service';
+import { RefreshTokenService } from '../../services/refresh-token/refresh-token.service';
 import { VerifyCodeService } from '../../services/verify-code/verify-code.service';
 import { NotificationService } from '../../services/notification/notification.service';
 

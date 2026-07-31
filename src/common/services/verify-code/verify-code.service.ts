@@ -9,7 +9,7 @@ import { EmailService } from '../email/email.service';
 import { EncryptionService } from '../encryption/encryption.service';
 import { UserService } from '../../../modules/user/user.service';
 import { ConfigService } from '@nestjs/config';
-import { RefreshTokenService } from '../../../modules/refresh-token/refresh-token.service';
+import { RefreshTokenService } from '../refresh-token/refresh-token.service';
 import { VerifyCodeType } from '../../constants/auth.constant';
 
 @Injectable()

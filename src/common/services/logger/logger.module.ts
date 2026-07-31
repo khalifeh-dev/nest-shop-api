@@ -1,11 +1,12 @@
 import { DynamicModule, Global, Module } from '@nestjs/common';
-import { LoggerService } from './logger.service';
 import { PinoLoggerService } from './pino/pino.service';
 import { LOGGER_CONTEXT, LOGGER_OPTIONS, type LoggerOptions } from './logger-options.interface';
-import { LoggerFactory } from './logger.factory';
+import { LoggerService } from './logger.service';
 
 @Global()
-@Module({})
+@Module({
+  providers: [LoggerService]
+})
 export class LoggerModule {
   static forRoot(options: LoggerOptions = {}): DynamicModule {
     return {

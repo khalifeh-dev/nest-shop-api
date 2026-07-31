@@ -7,7 +7,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtAccessStrategy } from '../../common/strategies/jwt-access.strategy';
 import { JwtRefreshStrategy } from '../../common/strategies/jwt.refresh.strategy';
-import { RefreshTokenModule } from '../refresh-token/refresh-token.module';
+import { RefreshTokenModule } from '../../common/services/refresh-token/refresh-token.module';
 import { EncryptionModule } from '../../common/services/encryption/encryption.module';
 import { VerifyCodeModule } from '../../common/services/verify-code/verify-code.module';
 import { EmailModule } from '../../common/services/email/email.module';

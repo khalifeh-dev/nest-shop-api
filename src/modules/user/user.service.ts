@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -8,7 +9,7 @@ import {
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { DatabaseService } from '../../common/database/database.service';
-import { Prisma, User } from '@prisma/client';
+import { Prisma, User, UserImage } from '@prisma/client';
 import { EncryptionService } from '../../common/services/encryption/encryption.service';
 import { FindAll } from '../../common/types/find-all.type';
 import { pick } from 'lodash';
@@ -17,6 +18,9 @@ import { CloudinaryService } from '../../common/services/cloudinary/cloudinary.s
 import { UserAction, UserStatus } from '../../common/constants/user.constant';
 import { FindAllUserDto } from './dto/find-all.dto';
 import { GetUserNotificationsDto } from '../../common/services/notification/dto';
+import type { LoggerService } from '../../common/services/logger/logger-options.interface';
+import { OnQueueRemoved } from '@nestjs/bull';
+import { ErrorUtil } from '../../common/utils/error.util';
 
 @Injectable()
 export class UserService {
@@ -27,6 +31,7 @@ export class UserService {
     private prisma: DatabaseService,
     private encryption: EncryptionService,
     private cloudinaryService: CloudinaryService,
+    @Inject('LoggerService') private logger: LoggerService,
   ) {
     this._write = this.prisma.master;
     this._read = this.prisma.replica;
@@ -34,28 +39,51 @@ export class UserService {
 
   public async create(dto: CreateUserDto): Promise<SanitizeUser> {
     try {
-      const isUserExist = await this._read.user.findUnique({
+      this.logger.debug(
+        `📝 Creating user with email: ${dto.email}`,
+        'UserService',
+      );
+      const isUserExist: boolean = await this._read.user.findUnique({
         where: { email: dto.email },
       });
 
-      if (isUserExist)
+      if (isUserExist) {
+        this.logger.warn(`⚠️ User already exists: ${dto.email}`, 'UserService');
         throw new ConflictException(`User Already Exists With Email ❌.`);
+      }
 
       const { firstName, lastName, email, password } = dto;
       const hashPassword = await this.encryption.hash(password);
+      this.logger.debug(`🔐 Password hashed for: ${dto.email}`, 'UserService');
 
-      const createUser = await this._write.user.create({
+      const createUser: User = await this._write.user.create({
         data: { firstName, lastName, email, password: hashPassword },
       });
+
+      this.logger.info(
+        `✅ User created: ${createUser.id} - ${createUser.email}`,
+        'UserService',
+      );
+
       return this.sanitizeUser(createUser);
     } catch (error) {
       if (error instanceof ConflictException) throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in create user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
   public async findAll(dto: FindAllUserDto): Promise<FindAll<SanitizeUser>> {
     try {
+      this.logger.info(
+        `🔍 Finding all user with page: ${dto.page} & limit: ${dto.limit}`,
+        'UserService',
+      );
+
       const {
         limit = 20,
         page = 1,
@@ -94,6 +122,8 @@ export class UserService {
         this._read.user.count({ where }),
       ]);
 
+      this.logger.info(`✅ Founded ${data.length} user`, 'UserService');
+
       const totalPages = Math.ceil(total / finalLimit);
 
       return {
@@ -104,33 +134,70 @@ export class UserService {
         pages: totalPages,
       };
     } catch (error) {
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in find all user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
   public async findOne(id: string): Promise<SanitizeUser> {
     try {
-      const user = await this._read.user.findUnique({ where: { id } });
-      if (!user)
+      this.logger.debug(`🔍 Finding user: ${id}`, 'UserService');
+      const user: User = await this._read.user.findUnique({ where: { id } });
+      if (!user) {
+        this.logger.warn(`⚠️ User not found: ${id}`, 'UserService');
         throw new NotFoundException(`User Not Found With ID ${id} ❌.`);
+      }
+
+      this.logger.info(
+        `✅ A user with the full ${user.firstName} ${user.lastName} was found.", "UserService`,
+      );
 
       return this.sanitizeUser(user);
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in find one user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
   public async secureFindOne(id: string): Promise<SanitizeUser> {
-    const user = await this.findOne(id);
-    if (user.deletedAt)
+    const user: SanitizeUser = await this.findOne(id);
+    if (user.deletedAt) {
+      this.logger.warn(
+        `⚠️ User with id: ${id} has already been deleted`,
+        'UserService',
+      );
       throw new BadRequestException('This User Has Already Been Deleted.');
+    } else if (user.userStatus === 'BANNED') {
+      this.logger.warn(
+        `⚠️ User with id: ${id} has been blocked`,
+        'UserService',
+      );
+      throw new BadRequestException('This User Has Been Blocked.');
+    } else if (user.userStatus === 'INACTIVE') {
+      this.logger.warn(
+        `⚠️ User with id: ${id} has been inactive`,
+        'UserService',
+      );
+      throw new BadRequestException('This User Has Already Been InActive.');
+    }
+
     return user;
   }
 
   public async update(id: string, dto: UpdateUserDto): Promise<SanitizeUser> {
     try {
       await this.secureFindOne(id);
+
+      this.logger.info(`🧩 Updating user: ${id}`, 'UserService');
 
       const updateData = pick(dto, [
         'firstName',
@@ -141,14 +208,24 @@ export class UserService {
         'userName',
       ]);
 
-      const updateduser = await this._write.user.update({
+      const updatedUser: User = await this._write.user.update({
         where: { id },
         data: updateData,
       });
 
-      return this.sanitizeUser(updateduser);
+      this.logger.info(
+        `🧩 User updated: ${updatedUser.firstName} ${updatedUser.lastName}`,
+        'UserService',
+      );
+
+      return this.sanitizeUser(updatedUser);
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in update user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
@@ -156,29 +233,61 @@ export class UserService {
   public async remove(id: string): Promise<SanitizeUser> {
     try {
       await this.secureFindOne(id);
-      const removeUser = await this._write.user.delete({
+
+      this.logger.info(`🗑️ Deleting user: ${id}`, 'UserService');
+
+      const removeUser: User = await this._write.user.delete({
         where: { id },
       });
+
+      this.logger.info(
+        `✅ User deleted: ${removeUser.firstName} ${removeUser.email}`,
+        'UserService',
+      );
+
       return this.sanitizeUser(removeUser);
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in remove user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
   public async findOneByEmail(email: string): Promise<User> {
     try {
+      this.logger.debug(`🔍 Finding user: ${email}`, 'UserService');
       const user = await this._read.user.findUnique({
         where: { email },
       });
 
-      if (!user) throw new NotFoundException(`User Not Found With Email ❌.`);
-      if (user.deletedAt)
+      if (!user) {
+        this.logger.warn(`⚠️ User not found: ${email}`, 'UserService');
+        throw new NotFoundException(`User Not Found With Email ❌.`);
+      }
+      if (user.deletedAt) {
+        this.logger.warn(
+          `⚠️ User with ${email} has already deleted`,
+          'UserService',
+        );
         throw new BadRequestException('This User Has Already Been Deleted.');
+      }
+
+      this.logger.info(
+        `✅ A user with the full ${user.firstName} ${user.lastName} was found.", "UserService`,
+      );
 
       return user;
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in find one by email user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
@@ -200,11 +309,19 @@ export class UserService {
 
   public async uploadAvatar(file: Express.Multer.File, userId: string) {
     try {
+      this.logger.info(
+        `📷 Upload image to profile for user: ${userId}`,
+        'UserService',
+      );
+
       await this.secureFindOne(userId);
+
       const uploadResult = await this.cloudinaryService.uploadAvatar(
         file,
         userId,
       );
+
+      this.logger.info(`🔗 Getting profile image url`, 'UserService');
 
       const userImages = await this._write.userImage.create({
         data: {
@@ -217,7 +334,14 @@ export class UserService {
         },
       });
 
+      this.logger.info(
+        `✅ Create a image source for user ${userId}`,
+        'UserService',
+      );
+
       await this.update(userId, { avatar: uploadResult.secure_url });
+
+      this.logger.info(`✅ Add image to profile`, 'UserService');
 
       return {
         url: uploadResult.secure_url,
@@ -225,25 +349,29 @@ export class UserService {
         imageId: userImages.id,
       };
     } catch (error) {
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in upload avatar user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
   public async removeAvatar(userId: string) {
     try {
-      const user = await this._read.user.findUnique({
-        where: { id: userId },
-        select: { avatar: true, id: true },
-      });
+      this.logger.info(
+        `🗑️ Deleting user: ${userId} profile image`,
+        'UserService',
+      );
 
-      if (user.deletedAt)
-        throw new BadRequestException('This User Has Already Been Deleted.');
-
-      if (!user) {
-        throw new NotFoundException('User not found');
-      }
+      const user = await this.secureFindOne(userId);
 
       if (!user.avatar) {
+        this.logger.warn(
+          `⚠️ User profile image not found: ${userId}`,
+          'UserService',
+        );
         throw new BadRequestException('User has no avatar');
       }
 
@@ -255,29 +383,52 @@ export class UserService {
         },
       });
 
+      this.logger.info(`✅ Found user profile image`, 'UserService');
+
       if (userImage) {
         await this.cloudinaryService.deleteFile(userImage.publicId);
+        this.logger.info(
+          `✅ Remove user profile image from Cloudinary`,
+          'UserService',
+        );
         await this._write.userImage.update({
           where: { id: userImage.id },
           data: { isActive: false },
         });
+        this.logger.info(
+          `✅ Remove user profile image from database`,
+          'UserService',
+        );
       }
+
+      this.logger.info(
+        `✅ Deleting user profile image successfuly`,
+        'UserService',
+      );
 
       return this._write.user.update({
         where: { id: userId },
         data: { avatar: null },
       });
     } catch (error) {
-      if (error instanceof NotFoundException) return error;
-      if (error instanceof BadRequestException) return error;
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException) throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in remove avatar user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
   public async getUserImages(userId: string) {
     try {
+      this.logger.info(`✅ Finding user profile images`, 'UserService');
+
       await this.secureFindOne(userId);
-      return await this._read.userImage.findMany({
+
+      const userImages: UserImage[] = await this._read.userImage.findMany({
         where: {
           userId,
           isActive: true,
@@ -294,13 +445,30 @@ export class UserService {
           size: true,
         },
       });
+
+      this.logger.info(
+        `✅ Founded ${userImages.length} from user: ${userId}`,
+        'UserService',
+      );
+
+      return userImages;
     } catch (error) {
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in get user images user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
   public async updateRefreshToken(userId: string, refreshTokenId: string) {
     try {
+      this.logger.debug(
+        `🔄 Updating refresh token for user: ${userId}`,
+        'UserService',
+      );
+
       await this.secureFindOne(userId);
 
       const updateToken = await this._write.user.update({
@@ -308,15 +476,27 @@ export class UserService {
         data: { refreshTokens: { connect: { id: refreshTokenId } } },
       });
 
+      this.logger.info(
+        `✅ Refresh token updated successfully for user: ${userId}`,
+        'UserService',
+      );
+
       return this.sanitizeUser(updateToken);
     } catch (error) {
-      if (error instanceof NotFoundException) return error;
+      if (error instanceof NotFoundException) throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in update refresh token user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
   public async getUserDevices(userId: string) {
     try {
+      this.logger.debug(`🔍 getUserDevices - User: ${userId}`, 'UserService');
+
       await this.secureFindOne(userId);
 
       const now = new Date();
@@ -368,7 +548,7 @@ export class UserService {
         locationData.map((item) => [item.deviceId, item.location]),
       );
 
-      return devices.map((device) => ({
+      const allDevices = devices.map((device) => ({
         deviceId: device.deviceId,
         deviceType: device.deviceType,
         deviceInfo: device.deviceInfo,
@@ -379,14 +559,31 @@ export class UserService {
         firstSeen: device._max?.createdAt,
         activeSessions: device._count?._all || 0,
       }));
+
+      this.logger.info(
+        `✅ getUserDevices - User: ${userId}, Devices: ${allDevices.length}`,
+        'UserService',
+      );
+
+      return allDevices;
     } catch (error) {
-      if (error instanceof NotFoundException) return error;
+      if (error instanceof NotFoundException) throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in get user devices user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
   public async getDeviceDetails(userId: string, deviceId: string) {
     try {
+      this.logger.debug(
+        `🔍 getDeviceDetails - User: ${userId}, Device: ${deviceId.substring(0, 8)}...`,
+        'UserService',
+      );
+
       this.secureFindOne(userId);
       const token = await this._read.refreshToken.findFirst({
         where: {
@@ -407,20 +604,40 @@ export class UserService {
         },
       });
 
-      if (!token)
+      if (!token) {
+        this.logger.warn(
+          `⚠️ Device not found - User: ${userId}, Device: ${deviceId.substring(0, 8)}...`,
+          'UserService',
+        );
         throw new NotFoundException(
           'The specified device was not found or is inactive.',
         );
+      }
+
+      this.logger.info(
+        `✅ Device details fetched - User: ${userId}, Device: ${token.deviceInfo || 'Unknown'}`,
+        'UserService',
+      );
 
       return token;
     } catch (error) {
       if (error instanceof NotFoundException) return error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in get user device details user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
   public async softDeleteUser(userId: string, reason?: string) {
     try {
+      this.logger.debug(
+        `🗑️ Soft deleting user: ${userId}${reason ? `, Reason: ${reason}` : ''}`,
+        'UserService',
+      );
+
       await this.findOne(userId);
       const updateUser = await this._write.user.update({
         where: { id: userId },
@@ -431,15 +648,27 @@ export class UserService {
         },
       });
 
+      this.logger.info(
+        `✅ User soft deleted: ${userId}, Reason: ${reason || UserAction.USER_DELETE_REASON}`,
+        'UserService',
+      );
+
       return this.sanitizeUser(updateUser);
     } catch (error) {
       if (error instanceof NotFoundException) return error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in soft delete user user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
   public async restoreUser(userId: string) {
     try {
+      this.logger.info(`🔑 Restore user account: ${userId}`, 'UserService');
+
       await this.secureFindOne(userId);
 
       const updateUser = await this._write.user.update({
@@ -451,15 +680,27 @@ export class UserService {
         },
       });
 
+      this.logger.info(
+        `✅ Restore user account: ${userId} successfuly`,
+        'UserService',
+      );
+
       return this.sanitizeUser(updateUser);
     } catch (error) {
       if (error instanceof NotFoundException) return error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in restore user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
   public async inActiveUser(userId: string) {
     try {
+      this.logger.info(`🔧 Inactive user account: ${userId}`, 'UserService');
+
       await this.secureFindOne(userId);
 
       const updatedUser = await this.updateUserStatus(
@@ -467,15 +708,27 @@ export class UserService {
         UserStatus.In_Active,
       );
 
+      this.logger.info(
+        `✅ Inactive user account: ${userId} successfuly`,
+        'UserService',
+      );
+
       return this.sanitizeUser(updatedUser);
     } catch (error) {
       if (error instanceof NotFoundException) return error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in in active user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
   public async banUser(userId: string) {
     try {
+      this.logger.info(`🗡️ Ban user account: ${userId}`, 'UserService');
+
       await this.secureFindOne(userId);
 
       const updatedUser = await this.updateUserStatus(
@@ -483,9 +736,19 @@ export class UserService {
         UserStatus.Banned,
       );
 
+      this.logger.info(
+        `✅ Ban user account: ${userId} successfuly`,
+        'UserService',
+      );
+
       return this.sanitizeUser(updatedUser);
     } catch (error) {
       if (error instanceof NotFoundException) return error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in ban user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
@@ -494,90 +757,119 @@ export class UserService {
     userId: string,
     filters?: GetUserNotificationsDto,
   ) {
-    await this.secureFindOne(userId);
+    try {
+      this.logger.debug(
+        `🔍 Fetching notifications for user: ${userId}`,
+        'NotificationService',
+      );
 
-    const { limit = 20, page = 1, ...rest } = filters || {};
-    const finalLimit = Math.min(Math.max(limit, 1), 50);
-    const skip = (page - 1) * finalLimit;
+      await this.secureFindOne(userId);
 
-    const where = this.buildNotificationWhereClause(userId, rest);
+      const { limit = 20, page = 1, ...rest } = filters || {};
+      const finalLimit = Math.min(Math.max(limit, 1), 50);
+      const skip = (page - 1) * finalLimit;
 
-    const [notifications, totalCount, unreadCount] = await Promise.all([
-      this.prisma.replica.userNotification.findMany({
-        where,
-        skip,
-        take: finalLimit,
-        orderBy: {
-          [rest.sortBy === 'createdAt' ? 'createdAt' : 'deliveredAt']:
-            rest.sortOrder || 'desc',
-        },
-        include: {
-          notification: {
-            select: {
-              id: true,
-              title: true,
-              message: true,
-              content: true,
-              type: true,
-              priority: true,
-              isBroadcast: true,
-              link: true,
-              icon: true,
-              sentAt: true,
-              createdAt: true,
+      this.logger.debug(
+        `📊 Query params - Limit: ${finalLimit}, Page: ${page}`,
+        'NotificationService',
+      );
+
+      const where = this.buildNotificationWhereClause(userId, rest);
+
+      const [notifications, totalCount, unreadCount] = await Promise.all([
+        this.prisma.replica.userNotification.findMany({
+          where,
+          skip,
+          take: finalLimit,
+          orderBy: {
+            [rest.sortBy === 'createdAt' ? 'createdAt' : 'deliveredAt']:
+              rest.sortOrder || 'desc',
+          },
+          include: {
+            notification: {
+              select: {
+                id: true,
+                title: true,
+                message: true,
+                content: true,
+                type: true,
+                priority: true,
+                isBroadcast: true,
+                link: true,
+                icon: true,
+                sentAt: true,
+                createdAt: true,
+              },
             },
           },
+        }),
+        this.prisma.replica.userNotification.count({ where: { userId } }),
+        this.prisma.replica.userNotification.count({
+          where: { userId, isRead: false },
+        }),
+      ]);
+
+      const priorityCounts = await this.getUserNotificationStats(userId);
+
+      this.logger.info(
+        `✅ Notifications fetched for user ${userId}: ${notifications.length}/${totalCount} items, Unread: ${unreadCount}`,
+        'NotificationService',
+      );
+
+      return {
+        data: notifications.map((n) => ({
+          ...pick(n, [
+            'id',
+            'userId',
+            'isRead',
+            'readAt',
+            'deliveredAt',
+            'isDismissedAt',
+          ]),
+          notification: pick(n.notification, [
+            'id',
+            'title',
+            'message',
+            'content',
+            'type',
+            'priority',
+            'isBroadcast',
+            'link',
+            'icon',
+            'sentAt',
+            'createdAt',
+          ]),
+        })),
+        pagination: {
+          limit: finalLimit,
+          page,
+          pages: Math.ceil(totalCount / finalLimit),
+          total: totalCount,
         },
-      }),
-      this.prisma.replica.userNotification.count({ where: { userId } }),
-      this.prisma.replica.userNotification.count({
-        where: { userId, isRead: false },
-      }),
-    ]);
-
-    const priorityCounts = await this.getUserNotificationStats(userId);
-
-    return {
-      data: notifications.map((n) => ({
-        ...pick(n, [
-          'id',
-          'userId',
-          'isRead',
-          'readAt',
-          'deliveredAt',
-          'isDismissedAt',
-        ]),
-        notification: pick(n.notification, [
-          'id',
-          'title',
-          'message',
-          'content',
-          'type',
-          'priority',
-          'isBroadcast',
-          'link',
-          'icon',
-          'sentAt',
-          'createdAt',
-        ]),
-      })),
-      pagination: {
-        limit: finalLimit,
-        page,
-        pages: Math.ceil(totalCount / finalLimit),
-        total: totalCount,
-      },
-      stats: {
-        totalCount,
-        unreadCount,
-        readCount: totalCount - unreadCount,
-        priorityCounts,
-      },
-    };
+        stats: {
+          totalCount,
+          unreadCount,
+          readCount: totalCount - unreadCount,
+          priorityCounts,
+        },
+      };
+    } catch (error) {
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in get user notifications user: ${message}`,
+        'UserService',
+      );
+      throw error;
+    }
   }
 
   public async getUserNotificationStats(userId: string) {
     try {
+      this.logger.debug(
+        `📊 Fetching notification stats for user: ${userId}`,
+        'NotificationService',
+      );
+
       const [total, unread] = await Promise.all([
         this.prisma.replica.userNotification.count({
           where: { userId },
@@ -590,12 +882,22 @@ export class UserService {
         }),
       ]);
 
+      this.logger.info(
+        `✅ Notification stats fetched for user ${userId} -> Total: ${total}, Unread: ${unread}, Read: ${total - unread}`,
+        'NotificationService',
+      );
+
       return {
         total,
         unread,
         read: total - unread,
       };
     } catch (error) {
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in get user notification stats user: ${message}`,
+        'UserService',
+      );
       throw new InternalServerErrorException('Internal Server Error.');
     }
   }

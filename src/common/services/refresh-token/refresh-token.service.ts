@@ -4,13 +4,13 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { DatabaseService } from '../../common/database/database.service';
-import { DeviceInfo } from '../../common/types/device-info.type';
+import { DatabaseService } from '../../database/database.service';
+import { DeviceInfo } from '../../types/device-info.type';
 import { JwtService } from '@nestjs/jwt';
-import { EncryptionService } from '../../common/services/encryption/encryption.service';
-import { UserService } from '../user/user.service';
+import { EncryptionService } from '../encryption/encryption.service';
+import { UserService } from '../../../modules/user/user.service';
 import { ConfigService } from '@nestjs/config';
-import { LogOut } from '../../common/constants/auth.constant';
+import { LogOut } from '../../constants/auth.constant';
 
 @Injectable()
 export class RefreshTokenService {

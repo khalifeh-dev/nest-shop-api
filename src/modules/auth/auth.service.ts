@@ -8,7 +8,7 @@ import {
 import { DatabaseService } from '../../common/database/database.service';
 import { SignUpDto } from './dto/sign-up.dto';
 import { UserService } from '../user/user.service';
-import { RefreshTokenService } from '../refresh-token/refresh-token.service';
+import { RefreshTokenService } from '../../common/services/refresh-token/refresh-token.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthProvider, RefreshToken, UserStatus } from '@prisma/client';
