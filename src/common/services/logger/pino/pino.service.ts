@@ -3,19 +3,24 @@ import pino, { type Logger as PinoLogger } from 'pino';
 import {
   type LoggerService,
   type LoggerOptions,
-  Level,
-   LOGGER_OPTIONS, LOGGER_CONTEXT
+  LOGGER_OPTIONS,
+  LOGGER_CONTEXT,
 } from '../logger-options.interface';
+import * as path from 'path';
+import * as fs from 'fs';
 
 @Injectable()
 export class PinoLoggerService implements LoggerService {
   private logger: PinoLogger;
   private context: string;
+  private isProduction: boolean;
+  private rotationStream: any;
 
   constructor(
     @Optional() @Inject(LOGGER_OPTIONS) options: LoggerOptions = {},
     @Optional() @Inject(LOGGER_CONTEXT) context: string = 'App',
   ) {
+    this.isProduction = process.env.NODE_ENV === 'production';
     this.context = context;
     this.logger = this.createPinoLogger(options);
   }
@@ -25,7 +30,7 @@ export class PinoLoggerService implements LoggerService {
 
     const targets: any[] = [];
 
-    if (options.enableConsole !== false) {
+    if (!options.enableConsole) {
       targets.push({
         target: 'pino-pretty',
         options: {
@@ -37,13 +42,44 @@ export class PinoLoggerService implements LoggerService {
     }
 
     if (options.enableFile && options.filePath) {
-      targets.push({
-        target: 'pino/file',
-        options: {
-          destination: options.filePath,
+      const logDir = path.dirname(options.filePath);
+      const logFileName = path.basename(options.filePath);
+
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+
+      try {
+        const pinoRoll = require('pino-roll');
+        const isWindows = process.platform === 'win32';
+        const rotationStream = pinoRoll({
+          file: options.filePath,
+          frequency: options.frequency || 86_400_000,
+          maxSize: options.maxSize || '20m',
+          maxFiles: options.maxFiles || 10,
+          retention: options.retention || '30d',
+          compress: options.compress !== false,
+          dateFormat: options.dateFormat || 'yyyy.MM.dd',
+          symlink: !isWindows,
           mkdir: true,
-        },
-      });
+        });
+
+        targets.push({
+          level: level,
+          stream: rotationStream,
+        });
+      } catch (error) {
+        console.warn('⚠️ pino-roll failed, using simple file logging');
+        const dest = pino.destination({
+          dest: options.filePath,
+          sync: true,
+          mkdir: true,
+        });
+        targets.push({
+          level: level,
+          stream: dest,
+        });
+      }
     }
 
     if (options.enableLoki && options.lokiUrl) {

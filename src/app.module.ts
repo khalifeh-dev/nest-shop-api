@@ -83,6 +83,11 @@ import { NotificationModule } from './common/services/notification/notification.
       filePath: './logs/app.log',
       // enableLoki: process.env.NODE_ENV === 'production',
       // lokiUrl: process.env.LOKI_URL,
+      maxSize: '20m', // 20 مگابایت
+      maxFiles: 10, // حداکثر ۱۰ فایل
+      retention: '30d', // نگهداری ۳۰ روز
+      compress: true, // زیپ کردن فایل‌های قدیمی
+      frequency: 86_400_000, // چرخش روزانه
       serviceName: 'my-nest-app',
       labels: { team: 'backend' },
     }),

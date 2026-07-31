@@ -7,6 +7,12 @@ export interface LoggerOptions {
   enableFile?: boolean;
   enableLoki?: boolean;
   filePath?: string;
+  maxSize?: string; // '20m', '100m', '1g'
+  maxFiles?: number;
+  retention?: string; // '30d', '7d', '1d'
+  compress?: boolean;
+  frequency?: number | string;
+  dateFormat?: string;
   lokiUrl?: string;
   serviceName?: string;
   labels?: Record<string, string>;
