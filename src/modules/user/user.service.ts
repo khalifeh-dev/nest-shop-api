@@ -15,7 +15,11 @@ import { FindAll } from '../../common/types/find-all.type';
 import { pick } from 'lodash';
 import { SanitizeUser } from '../../common/types/user.type';
 import { CloudinaryService } from '../../common/services/cloudinary/cloudinary.service';
-import { UserAction, UserStatus } from '../../common/constants/user.constant';
+import {
+  AccountAction,
+  UserActions,
+  UserStatus,
+} from '../../common/constants/user.constant';
 import { FindAllUserDto } from './dto/find-all.dto';
 import { GetUserNotificationsDto } from '../../common/services/notification/dto';
 import type { LoggerService } from '../../common/services/logger/logger-options.interface';
@@ -631,126 +635,106 @@ export class UserService {
     }
   }
 
-  public async softDeleteUser(userId: string, reason?: string) {
+  public async manageUserStatus(
+    userId: string,
+    action: UserActions,
+    reason?: string,
+  ) {
     try {
-      this.logger.debug(
-        `🗑️ Soft deleting user: ${userId}${reason ? `, Reason: ${reason}` : ''}`,
-        'UserService',
-      );
-
-      await this.findOne(userId);
-      const updateUser = await this._write.user.update({
-        where: { id: userId },
-        data: {
-          deletedAt: new Date(),
-          deleteReason: reason || UserAction.USER_DELETE_REASON,
-          isDeleted: true,
-        },
-      });
-
       this.logger.info(
-        `✅ User soft deleted: ${userId}, Reason: ${reason || UserAction.USER_DELETE_REASON}`,
+        `🔄 Managing user status: ${action} for user ${userId}`,
         'UserService',
       );
-
-      return this.sanitizeUser(updateUser);
-    } catch (error) {
-      if (error instanceof NotFoundException) return error;
-      let message = ErrorUtil.getMessage(error);
-      this.logger.error(
-        `❌ Unexpected error in soft delete user user: ${message}`,
-        'UserService',
-      );
-      throw new InternalServerErrorException('Internal Server Error ❌.');
-    }
-  }
-
-  public async restoreUser(userId: string) {
-    try {
-      this.logger.info(`🔑 Restore user account: ${userId}`, 'UserService');
 
       await this.secureFindOne(userId);
 
-      const updateUser = await this._write.user.update({
+      let updateData: any = {};
+      let successMessage = '';
+
+      switch (action) {
+        case UserActions.Restore:
+          updateData = {
+            userStatus: UserStatus.Active,
+            deletedAt: null,
+            deleteReason: null,
+            isDeleted: false,
+          };
+          successMessage = `✅ User ${userId} restored successfully`;
+          break;
+
+        case UserActions.SoftDelete:
+          updateData = {
+            userStatus: UserStatus.In_Active,
+            deletedAt: new Date(),
+            deleteReason: reason || AccountAction.USER_DELETE_REASON,
+            isDeleted: true,
+          };
+          successMessage = `✅ User ${userId} restored successfully`;
+          break;
+
+        case UserActions.InActive:
+          updateData = {
+            userStatus: UserStatus.In_Active,
+          };
+          successMessage = `✅ User ${userId} deactivated successfully`;
+          break;
+
+        case UserActions.Ban:
+          updateData = {
+            userStatus: UserStatus.Banned,
+          };
+          successMessage = `✅ User ${userId} banned successfully`;
+          break;
+
+        case UserActions.Active:
+          updateData = {
+            userStatus: UserStatus.Active,
+          };
+          successMessage = `✅ User ${userId} activated successfully`;
+          break;
+
+        default:
+          throw new BadRequestException(`Invalid action: ${action}`);
+      }
+
+      const updatedUser = await this._write.user.update({
         where: { id: userId },
-        data: {
-          deletedAt: null,
-          deleteReason: null,
-          isDeleted: false,
-        },
+        data: updateData,
       });
 
-      this.logger.info(
-        `✅ Restore user account: ${userId} successfuly`,
-        'UserService',
-      );
-
-      return this.sanitizeUser(updateUser);
-    } catch (error) {
-      if (error instanceof NotFoundException) return error;
-      let message = ErrorUtil.getMessage(error);
-      this.logger.error(
-        `❌ Unexpected error in restore user: ${message}`,
-        'UserService',
-      );
-      throw new InternalServerErrorException('Internal Server Error ❌.');
-    }
-  }
-
-  public async inActiveUser(userId: string) {
-    try {
-      this.logger.info(`🔧 Inactive user account: ${userId}`, 'UserService');
-
-      await this.secureFindOne(userId);
-
-      const updatedUser = await this.updateUserStatus(
-        userId,
-        UserStatus.In_Active,
-      );
-
-      this.logger.info(
-        `✅ Inactive user account: ${userId} successfuly`,
-        'UserService',
-      );
+      this.logger.info(successMessage, 'UserService');
 
       return this.sanitizeUser(updatedUser);
     } catch (error) {
-      if (error instanceof NotFoundException) return error;
-      let message = ErrorUtil.getMessage(error);
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException) throw error;
+      const message = ErrorUtil.getMessage(error);
       this.logger.error(
-        `❌ Unexpected error in in active user: ${message}`,
+        `❌ Failed to ${action} user ${userId}: ${message}`,
         'UserService',
       );
-      throw new InternalServerErrorException('Internal Server Error ❌.');
+      throw new InternalServerErrorException('Internal Server Error.');
     }
   }
 
-  public async banUser(userId: string) {
-    try {
-      this.logger.info(`🗡️ Ban user account: ${userId}`, 'UserService');
+  public async softDelete(userId: string, reason?: string) {
+    return await this.manageUserStatus(userId, UserActions.SoftDelete, reason);
+  }
 
-      await this.secureFindOne(userId);
+  public async ban(userId: string) {
+    return await this.manageUserStatus(userId, UserActions.Ban);
+  }
 
-      const updatedUser = await this.updateUserStatus(
-        userId,
-        UserStatus.Banned,
-      );
+  public async inActive(userId: string) {
+    return await this.manageUserStatus(userId, UserActions.InActive);
+  }
 
-      this.logger.info(
-        `✅ Ban user account: ${userId} successfuly`,
-        'UserService',
-      );
+  public async active(userId: string) {
+    return await this.manageUserStatus(userId, UserActions.Active);
+  }
 
-      return this.sanitizeUser(updatedUser);
-    } catch (error) {
-      if (error instanceof NotFoundException) return error;
-      let message = ErrorUtil.getMessage(error);
-      this.logger.error(
-        `❌ Unexpected error in ban user: ${message}`,
-        'UserService',
-      );
-      throw new InternalServerErrorException('Internal Server Error ❌.');
-    }
+  public async restore(userId: string) {
+    return await this.manageUserStatus(userId, UserActions.Restore);
   }
 
   public async getUserNotifications(
@@ -900,13 +884,6 @@ export class UserService {
       );
       throw new InternalServerErrorException('Internal Server Error.');
     }
-  }
-
-  private async updateUserStatus(userId: string, status: UserStatus) {
-    return await this._write.user.update({
-      where: { id: userId },
-      data: { userStatus: status },
-    });
   }
 
   private buildWhereClause(filters: {

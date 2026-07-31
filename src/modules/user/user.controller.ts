@@ -28,7 +28,7 @@ import {
 import { Pagination } from '../../common/types/pagination.type';
 import { SanitizeUser } from '../../common/types/user.type';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { UserAction } from '../../common/constants/user.constant';
+import { AccountAction } from '../../common/constants/user.constant';
 import { RefreshTokenService } from '../../common/services/refresh-token/refresh-token.service';
 import { FindAllUserDto } from './dto/find-all.dto';
 import { GetUserNotificationsDto } from '../../common/services/notification/dto';
@@ -167,50 +167,55 @@ export class UserController {
     return await this.userService.getDeviceDetails(userId, deviceId);
   }
 
-  @Delete('account/delete')
+  @Patch('account/:id/soft_delete')
+  @ApiOperation({ summary: 'Soft Delete user status by user' })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Remove user account' })
-  public async softDeleteMyAccount(
-    @CurrentUser('sub') userId: string,
-    @Body() reason?: string,
-  ) {
-    return await this.userService.softDeleteUser(userId, reason);
+  public async softDeleteByUser(@Param('userId') userId: string) {
+    const result = await this.userService.softDelete(
+      userId,
+      AccountAction.USER_DELETE_REASON,
+    );
+
+    return result;
   }
 
-  @Delete('user_account/delete/:userId')
-  @ApiParam({ name: 'id', description: 'User ID', type: String })
-  @ApiOperation({ summary: 'Remove user account by admin' })
+  @Patch('account/:id/soft_delete')
+  @ApiOperation({ summary: 'Soft Delete user status by admin' })
   @HttpCode(HttpStatus.OK)
   public async softDeleteByAdmin(@Param('userId') userId: string) {
-    await this.refreshTokenService.revokeAllTokensByDevice(userId);
-    return await this.userService.softDeleteUser(
+    const result = await this.userService.softDelete(
       userId,
-      UserAction.ADMIN_DELETE_REASON,
+      AccountAction.ADMIN_DELETE_REASON,
     );
+
+    return result;
   }
 
-  @Patch('account/restore')
-  @ApiOperation({ summary: 'restore user' })
+  @Patch('account/:id/restore')
+  @ApiOperation({ summary: 'restore user status' })
   @HttpCode(HttpStatus.OK)
-  public async restoreMyAccount(@CurrentUser('sub') userId: string) {
-    return await this.userService.restoreUser(userId);
+  public async restore(@Param('userId') userId: string) {
+    const result = await this.userService.restore(userId);
+
+    return result;
   }
 
-  @Get('user_account/in_active/:userId')
-  @ApiParam({ name: 'id', description: 'User ID', type: String })
-  @ApiOperation({ summary: 'Inactive user account by admin' })
+  @Patch('account/:id/ban')
+  @ApiOperation({ summary: 'ban user status' })
   @HttpCode(HttpStatus.OK)
-  public async inActiveUser(@Param('userId') userId: string) {
-    return await this.userService.inActiveUser(userId);
+  public async ban(@Param('userId') userId: string) {
+    const result = await this.userService.ban(userId);
+
+    return result;
   }
 
-  @Get('user_account/ban/:userId')
-  @ApiParam({ name: 'id', description: 'User ID', type: String })
-  @ApiOperation({ summary: 'Ban user account by admin' })
+  @Patch('account/:id/inactive')
+  @ApiOperation({ summary: 'inactive user status' })
   @HttpCode(HttpStatus.OK)
-  public async banUser(@Param('userId') userId: string) {
-    await this.refreshTokenService.revokeAllTokensByDevice(userId);
-    return await this.userService.banUser(userId);
+  public async inActive(@Param('userId') userId: string) {
+    const result = await this.userService.inActive(userId);
+
+    return result;
   }
 
   @Get('user-notifications')
@@ -219,13 +224,33 @@ export class UserController {
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'search', required: false, type: String, example: '' })
   @ApiQuery({ name: 'isRead', required: false, type: Boolean, example: false })
-  @ApiQuery({ name: 'priority', required: false, type: String, example: NotificationPriority.MEDIUM })
+  @ApiQuery({
+    name: 'priority',
+    required: false,
+    type: String,
+    example: NotificationPriority.MEDIUM,
+  })
   @ApiQuery({ name: 'fromDate', required: false, type: String, example: '' })
   @ApiQuery({ name: 'toDate', required: false, type: String, example: '' })
-  @ApiQuery({ name: 'isBroadcast', required: false, type: Boolean, example: false })
+  @ApiQuery({
+    name: 'isBroadcast',
+    required: false,
+    type: Boolean,
+    example: false,
+  })
   @ApiQuery({ name: 'type', required: false, type: String, example: '' })
-  @ApiQuery({ name: 'sortBy', required: false, type: String, example: 'createdAt' })
-  @ApiQuery({ name: 'sortOrder', required: false, type: String, example: 'desc' })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    type: String,
+    example: 'createdAt',
+  })
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    type: String,
+    example: 'desc',
+  })
   @HttpCode(HttpStatus.OK)
   async getMyNotifications(
     @CurrentUser('sub') userId: string,
