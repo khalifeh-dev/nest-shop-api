@@ -373,11 +373,12 @@ model Product {
   userId    String   @map("user_id")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  images      Json?
 
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  categories Category[] @relation("productCategories")
+  categories  ProductCategory[]
   // bookmarks    Bookmark[]
   // comments     Comment[]
   // orderItems   OrderItem[]
@@ -385,6 +386,20 @@ model Product {
   // savedCardItems SavedCartItem[]
 
   @@map("products")
+}
+
+//? <----------------------- Product Category ----------------------->
+model ProductCategory {
+  productId   String   @map("product_id")
+  categoryId  String   @map("category_id")
+  
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+
+  @@id([productId, categoryId])
+  @@map("product_categories")
 }
 
 //? <----------------------- Category ----------------------->
@@ -395,8 +410,10 @@ model Category {
   description String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  
+  isActive    Boolean  @default(true)
 
-  products    Product[] @relation("productCategories")
+  products    ProductCategory[]
 
   @@map("categories")
 }

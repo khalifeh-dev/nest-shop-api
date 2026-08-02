@@ -20,6 +20,7 @@ import { EmailModule } from '../../common/services/email/email.module';
     EncryptionModule,
     VerifyCodeModule,
     EmailModule,
+    PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
