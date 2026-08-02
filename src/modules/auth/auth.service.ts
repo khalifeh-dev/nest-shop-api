@@ -38,6 +38,11 @@ export class AuthService {
   }
 
   public async signUp(dto: SignUpDto & DeviceDto) {
+    this.logger.info(
+      `🧱 Sign up user: ${dto.firstName} ${dto.lastName} (${dto.email})`,
+      'AuthService',
+    );
+
     const userData = {
       firstName: dto.firstName,
       lastName: dto.lastName,
@@ -67,15 +72,21 @@ export class AuthService {
       deviceType,
     });
 
+    this.logger.info(`🔑 Create refresh token for user: ${id}`, 'AuthService');
+
     const updateUser = await this.userService.updateRefreshToken(
       id,
       refreshToken.id,
     );
 
+    this.logger.info(`🔐 Add refresh token to user`, 'AuthService');
+
     const accessToken = this.jwtService.sign(payload, {
       secret: this.configService.get('JWT_ACCESS_SECRET_KEY'),
       expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION') || '15m',
     });
+
+    this.logger.info(`🔐 Create access token for user: ${id}`, 'AuthService');
 
     return {
       user: updateUser,
@@ -90,15 +101,22 @@ export class AuthService {
   }
 
   public async signIn(dto: SignInDto) {
+    this.logger.info(`🧱 Sign in user: ${dto.email}`, 'AuthService');
+
     const findUser = await this.userService.findOneByEmail(dto.email);
 
     if (findUser.userStatus !== UserStatus.ACTIVE) {
+      this.logger.info(`🗡️ User has not already active`, 'AuthService');
       throw new UnauthorizedException(
         'Your Account Is Inactive Or Ban. Please Contact Support.',
       );
     }
 
     if (!findUser.password) {
+      this.logger.warn(
+        `⚠️ User does not have a password because this user already logined with (Google, Github, apple)`,
+        'AuthService',
+      );
       throw new UnauthorizedException(
         'This account uses social login (Google, GitHub, etc.). Please use that method to sign in.',
       );
@@ -109,8 +127,10 @@ export class AuthService {
       dto.password,
     );
 
-    if (!checkPassowrd)
+    if (!checkPassowrd) {
+      this.logger.warn(`⚠️ User password isn't match with DTO`, 'AuthService');
       throw new BadRequestException('Email Or Password Is Wrong .');
+    }
 
     const { id, firstName, lastName, email, userName } = findUser;
 
@@ -131,15 +151,30 @@ export class AuthService {
       deviceType,
     });
 
+    this.logger.info(
+      `🔑 Create a new refresh token for user: ${email}`,
+      'AuthService',
+    );
+
     const updateUser = await this.userService.updateRefreshToken(
       id,
       refreshToken.id,
+    );
+
+    this.logger.info(
+      `🔧 Add new refresh token to user: ${email}`,
+      'AuthService',
     );
 
     const accessToken = this.jwtService.sign(payload, {
       secret: this.configService.get('JWT_ACCESS_SECRET_KEY'),
       expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION') || '15m',
     });
+
+    this.logger.info(
+      `🔐 Create new access token for user: ${id}`,
+      'AuthService',
+    );
 
     return {
       user: updateUser,
@@ -154,9 +189,15 @@ export class AuthService {
   }
 
   public async signOut(userId: string, deviceId?: string) {
+    this.logger.info(`🪓 Sign out user: ${userId}`, 'AuthService');
+
     await this.userService.secureFindOne(userId);
 
     if (deviceId) {
+      this.logger.warn(
+        `🗡️ Revoke user refresh token by device id`,
+        'AuthService',
+      );
       return await this.refreshTokenService.revokeToken(userId, deviceId);
     }
 
@@ -173,17 +214,16 @@ export class AuthService {
     });
 
     if (!token) {
+      this.logger.warn(`⚠️ User doesn't have a token`, 'AuthService');
       throw new NotFoundException('No active token found for this user');
     }
 
-    await this._write.refreshToken.update({
-      where: { id: token.id },
-      data: {
-        isRevoked: true,
-        revokedAt: new Date(),
-        revokedReason: LogOut.USER_LOGOUT,
-      },
-    });
+    await this.refreshTokenService.revokeTokenById(token.id);
+
+    this.logger.info(
+      `🗡️ Revoke user refresh token without device id`,
+      'AuthService',
+    );
 
     return {
       message: 'Logged out successfully',
@@ -192,19 +232,25 @@ export class AuthService {
   }
 
   public async signOutAll(userId: string) {
+    this.logger.info(`🪓 Sign out all user ${userId} device`, 'AuthService');
     await this.userService.secureFindOne(userId);
     return await this.refreshTokenService.revokeAllTokensByDevice(userId);
   }
 
-  public async signOutDevice(userId: string, deviceId?: string) {
+  public async signOutDevice(userId: string, deviceId: string) {
+    this.logger.info(`🗡️ Sign out with a device by ${userId}`, 'AuthService');
     await this.userService.secureFindOne(userId);
-    if (!deviceId) throw new BadRequestException('Device ID is required');
+    if (!deviceId) {
+      this.logger.warn(`⚠️ Device id is require`, 'AuthService');
+      throw new BadRequestException('Device ID is required');
+    }
 
     return await this.refreshTokenService.revokeToken(userId, deviceId);
   }
 
   //! Fix Use Transcation Bug !//
   public async refresh(providedRefreshToken: string, deviceDto: DeviceDto) {
+    this.logger.info(`🔄️ Refresh user token`, 'AuthService');
     let payload;
     const deviceId = this.refreshTokenService.generateDeviceId(deviceDto);
 
@@ -212,12 +258,14 @@ export class AuthService {
       payload = this.jwtService.verify(providedRefreshToken, {
         secret: this.configService.get('JWT_REFRESH_SECRET_KEY'),
       });
+      this.logger.info(`🔑 Token own is user: ${payload?.sub}`, 'AuthService');
     } catch (error) {
+      this.logger.warn(`🔐 Invalid refresh token attempt`, 'AuthService');
       throw new UnauthorizedException('Invalid refresh token.');
     }
 
     const userId = payload?.sub;
-    const user = await this.userService.findOne(userId);
+    const user = await this.userService.secureFindOne(userId);
 
     const hashedToken = await this.encryption.hash(providedRefreshToken);
 
@@ -236,10 +284,15 @@ export class AuthService {
       },
     });
 
-    if (!existingToken)
+    if (!existingToken) {
+      this.logger.warn(
+        `⚠️ Refresh token not found or revoked for user: ${userId}`,
+        'AuthService',
+      );
       throw new UnauthorizedException(
         'Refresh token not found or already revoked',
       );
+    }
 
     const result = await this.prisma.transaction(async (prisma) => {
       await prisma.refreshToken.update({
@@ -270,9 +323,13 @@ export class AuthService {
       );
 
       await this.userService.updateRefreshToken(userId, newRefreshToken.id);
-
       return newRefreshToken;
     });
+
+    this.logger.info(
+      `✅ Create a new refresh token for user: ${user.id}`,
+      'AuthService',
+    );
 
     const accessPayload = {
       id: user.id,
@@ -288,6 +345,11 @@ export class AuthService {
       expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION') || '15m',
     });
 
+    this.logger.info(
+      `✅ Create a new access token for user: ${user.id}`,
+      'AuthService',
+    );
+
     return {
       user,
       accessToken: newAccessToken,
@@ -296,9 +358,11 @@ export class AuthService {
   }
 
   public async OAuth(dto: OAuthUser, deviceInfo: DeviceDto) {
+    this.logger.info(`🔗 User login with oauth`, 'AuthService');
     let user = await this.findOAuthUser(dto);
 
     if (!user) {
+      this.logger.warn(`⚠️ User not found`, 'AuthService');
       user = await this.createOAuthUser(dto);
     }
 
@@ -307,8 +371,11 @@ export class AuthService {
       deviceInfo,
     );
 
+    this.logger.info(
+      `✅ Create a new refresh token for user: ${user.id}`,
+      'AuthService',
+    );
     await this.userService.updateRefreshToken(user.id, refreshToken.id);
-
     const payload = {
       id: user.id,
       firstName: user.firstName,
@@ -322,6 +389,11 @@ export class AuthService {
       secret: this.configService.get('JWT_ACCESS_SECRET_KEY'),
       expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION') || '15m',
     });
+
+    this.logger.info(
+      `✅ Create a new access token for user: ${user.id}`,
+      'AuthService',
+    );
 
     return {
       user: {
@@ -340,16 +412,24 @@ export class AuthService {
     };
   }
 
-  private async findOAuthUser(oAuthUser: OAuthUser) {
+  public async findOAuthUser(oAuthUser: OAuthUser) {
+    this.logger.info(`🔍 Find user provider`, 'AuthService');
     const where: any = {};
 
     if (oAuthUser.googleId) {
       where.googleId = oAuthUser.googleId;
+      this.logger.info(`🔑 User provider is google`, 'AuthService');
     } else if (oAuthUser.githubId) {
       where.githubId = oAuthUser.githubId;
+      this.logger.info(`🔑 User provider is github`, 'AuthService');
     } else if (oAuthUser.appleId) {
       where.appleId = oAuthUser.appleId;
+      this.logger.info(`🔑 User provider is apple`, 'AuthService');
     } else {
+      this.logger.warn(
+        `⚠️ The user does not have a provider and may have logged in using an email address.`,
+        'AuthService',
+      );
       where.email = oAuthUser.email;
     }
 
