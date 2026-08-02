@@ -122,6 +122,7 @@ model User {
   verifyCodes      verifyCode[]
   notifications    Notification[]
   userNotifications    UserNotification[]
+  products    Product[]
 }
 
 
@@ -354,4 +355,34 @@ model UserRole {
 
   @@id([userId, roleId])
   @@map("user_roles")
+}
+
+//? <----------------------- Product ----------------------->
+model Product {
+  id          String   @id @default(cuid())
+  title       String   @db.VarChar(128)
+  description String   @db.VarChar(256)
+  price       Int
+  stock       Int
+  brand       String   @db.VarChar(64)
+  model       String   @db.VarChar(64)
+  isActive    Boolean  @default(true)
+  discount    Int
+  rating      Float
+
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // categories Category[] @relation("productCategories")
+  // bookmarks    Bookmark[]
+  // comments     Comment[]
+  // orderItems   OrderItem[]
+  // cartItems   CartItem[]
+  // savedCardItems SavedCartItem[]
+
+  @@map("products")
 }

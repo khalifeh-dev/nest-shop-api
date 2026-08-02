@@ -22,6 +22,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from "@nestjs/bull"
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { NotificationModule } from './common/services/notification/notification.module';
+import { ProductModule } from './modules/product/product.module';
 
 @Module({
   imports: [
@@ -103,6 +104,7 @@ import { NotificationModule } from './common/services/notification/notification.
     VerifyCodeModule,
     TasksModule,
     NotificationModule,
+    ProductModule,
   ],
   controllers: [AppController],
   providers: [
