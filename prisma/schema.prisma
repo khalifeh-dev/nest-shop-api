@@ -377,7 +377,7 @@ model Product {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  // categories Category[] @relation("productCategories")
+  categories Category[] @relation("productCategories")
   // bookmarks    Bookmark[]
   // comments     Comment[]
   // orderItems   OrderItem[]
@@ -385,4 +385,18 @@ model Product {
   // savedCardItems SavedCartItem[]
 
   @@map("products")
+}
+
+//? <----------------------- Category ----------------------->
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products    Product[] @relation("productCategories")
+
+  @@map("categories")
 }

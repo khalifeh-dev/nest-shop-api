@@ -23,6 +23,7 @@ import { BullModule } from "@nestjs/bull"
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { NotificationModule } from './common/services/notification/notification.module';
 import { ProductModule } from './modules/product/product.module';
+import { CategoryModule } from './modules/category/category.module';
 
 @Module({
   imports: [
@@ -105,6 +106,7 @@ import { ProductModule } from './modules/product/product.module';
     TasksModule,
     NotificationModule,
     ProductModule,
+    CategoryModule,
   ],
   controllers: [AppController],
   providers: [
