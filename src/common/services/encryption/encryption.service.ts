@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { ErrorUtil } from '../../utils/error.util';
-import { LoggerService } from '../logger/logger-options.interface';
+import type { LoggerService } from '../logger/logger-options.interface';
 
 export interface Argon2Options {
   type?: number; // 0 = Argon2d, 1 = Argon2i, 2 = Argon2id
