@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -11,6 +12,9 @@ import { UserService } from '../../../modules/user/user.service';
 import { ConfigService } from '@nestjs/config';
 import { RefreshTokenService } from '../refresh-token/refresh-token.service';
 import { VerifyCodeType } from '../../constants/auth.constant';
+import crypto from "crypto"
+import type { LoggerService } from '../logger/logger-options.interface';
+import { ErrorUtil } from '../../utils/error.util';
 
 @Injectable()
 export class VerifyCodeService {
@@ -21,9 +25,11 @@ export class VerifyCodeService {
     private userService: UserService,
     private configService: ConfigService,
     private refreshTokenService: RefreshTokenService,
+    @Inject('LoggerService') private logger: LoggerService
   ) {}
 
   public async sendVerifyCode(email: string, type: VerifyCodeType) {
+    this.logger.info(`🔐 Send a verify code`, "VerifyCodeService");
     const user = await this.userService.findOneByEmail(email);
 
     await this.prisma.master.verifyCode.updateMany({
@@ -66,6 +72,8 @@ export class VerifyCodeService {
       resendLink: `${this.configService.get<string>('APP_URL')}/api/v1/auth/resend-verify-code`,
     });
 
+    this.logger.info(`✅ Verify code sent`, "VerifyCodeService");
+
     return {
       message: 'Verification code sent to your email.',
       expiresIn,
@@ -73,6 +81,7 @@ export class VerifyCodeService {
   }
 
   public async verifyCode(email: string, code: string) {
+    this.logger.info(`🔍 Check & veridy code`, "VerifyCodeService");
     const user = await this.userService.findOneByEmail(email);
 
     const resetRequest = await this.prisma.replica.verifyCode.findFirst({
@@ -84,11 +93,16 @@ export class VerifyCodeService {
       orderBy: { createdAt: 'desc' },
     });
 
-    if (!resetRequest)
-      throw new BadRequestException('Invalid or expired verification code');
+    if (!resetRequest){
+      this.logger.warn(`🪓 Invalid or expired verification code`, "VerifyCodeService");
+      throw new BadRequestException('Invalid or expired verification code');}
 
     const isValid = await this.encryption.verifyHash(resetRequest.code, code);
-    if (!isValid) throw new BadRequestException('Invalid verification code');
+    if (!isValid) {
+      this.logger.warn(`🪓 Invalid verification code`, "VerifyCodeService");
+      throw new BadRequestException('Invalid verification code');}
+
+      this.logger.info(`The code has been verified.`, "VerifyCodeService");
 
     return { valid: true };
   }
@@ -101,6 +115,7 @@ export class VerifyCodeService {
     deviceInfo: string;
     location: string;
   }) {
+    this.logger.info(`🔄️ Reset user password`, "VerifyCodeService");
     const user = await this.userService.findOneByEmail(data.email);
 
     const resetRequest = await this.prisma.replica.verifyCode.findFirst({
@@ -112,18 +127,23 @@ export class VerifyCodeService {
       orderBy: { createdAt: 'desc' },
     });
 
-    if (!resetRequest)
-      throw new BadRequestException('Invalid or expired verification code');
+    if (!resetRequest){
+      this.logger.warn(`Invalid or expired verification code`, "VerifyCodeService");
+      throw new BadRequestException('Invalid or expired verification code');}
 
     const isValid = await this.encryption.verifyHash(
       resetRequest.code,
       data.code,
     );
-    if (!isValid) throw new BadRequestException('Invalid verification code');
 
+    if(!isValid) {
+      this.logger.warn(`Invalid verification code`, "VerifyCodeService");
+      throw new BadRequestException('Invalid verification code');}
+
+    this.logger.info(`✅ The code has been verified.`, "VerifyCodeService");
     const hashedPassword = await this.encryption.hash(data.newPassword);
 
-    await this.userService.update(user.id, { password: hashedPassword });
+    await this.prisma.master.user.update({ where: { id: user.id }, data: { password: hashedPassword } })
     await this.prisma.master.verifyCode.update({
       where: { id: resetRequest.id },
       data: {
@@ -131,8 +151,7 @@ export class VerifyCodeService {
         usedAt: new Date(),
       },
     });
-    await this.refreshTokenService.revokeAllTokensByDevice(user.id);
-
+    await this.refreshTokenService.revokeAllTokensByDevice(user.id)
     await this.emailService.sendPasswordChangedEmail({
       to: user.email,
       fullname: `${user.firstName} ${user.lastName}`,
@@ -141,6 +160,8 @@ export class VerifyCodeService {
       location: data.location,
     });
 
+    this.logger.info(`✅ The password changed successfuly.`, "VerifyCodeService");
+
     return {
       message:
         'Password reset successfully. Please login with your new password.',
@@ -148,6 +169,7 @@ export class VerifyCodeService {
   }
 
   public async cleanUpExpiredCodes(olderThanDays: number = 7) {
+    this.logger.info(`🗡️ Cleaning expired codes`, "VerifyCodeService");
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
@@ -174,11 +196,15 @@ export class VerifyCodeService {
         };
       });
 
+      this.logger.info(`✅ Cleaning ${ result.total } successfuly`, "VerifyCodeService");
+
       return {
         count: result.total,
         details: result,
       };
     } catch (error) {
+      const message = ErrorUtil.getMessage(error)
+      this.logger.error(`⛔ Error in cleaning old verify codes: ${ message }`, "VerifyCodeService");
       throw new InternalServerErrorException(
         'Internal Server Error (VerifyCode<CleanUpExpiredCodes>) ❌.',
       );
@@ -186,6 +212,6 @@ export class VerifyCodeService {
   }
 
   public generateVerificationCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return crypto.randomUUID()
   }
 }
