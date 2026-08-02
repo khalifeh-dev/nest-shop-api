@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { ErrorUtil } from '../../utils/error.util';
+import { LoggerService } from '../logger/logger-options.interface';
 
 export interface Argon2Options {
   type?: number; // 0 = Argon2d, 1 = Argon2i, 2 = Argon2id
@@ -14,11 +15,15 @@ export interface Argon2Options {
 
 @Injectable()
 export class EncryptionService {
+
+  constructor(@Inject('LoggerService') private logger: LoggerService) {}
+
   public async hash(
     value: string,
     options: Argon2Options = {},
   ): Promise<string> {
     try {
+      this.logger.info(`🔐 Hasing a value`, "EncryptionService")
       const defaultOptions: Argon2Options = {
         type: 2, //Argon2id
         hashLength: 32,
@@ -37,8 +42,8 @@ export class EncryptionService {
 
       return await argon2.hash(value, cleanOptions);
     } catch (error) {
-      const errorMessage = ErrorUtil.getMessage(error);
-      console.log(`❌ Error(Hashing): ${errorMessage} ❌`);
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in hashing value: ${ message }`, "EncryptionService")
       throw new BadRequestException(`Error In Hashing ❌.`);
     }
   }
@@ -48,10 +53,11 @@ export class EncryptionService {
     plainValue: string,
   ): Promise<boolean> {
     try {
+      this.logger.info(`🔐 Verify hashed value`, "EncryptionService")
       return await argon2.verify(hashedValue, plainValue);
     } catch (error) {
-      const errorMessage = ErrorUtil.getMessage(error);
-      console.log(`❌ Error(Hashing): ${errorMessage} ❌`);
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in verify hashing value: ${ message }`, "EncryptionService")
       throw new BadRequestException(`Error In Hashing ❌.`);
     }
   }
