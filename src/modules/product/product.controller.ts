@@ -8,12 +8,21 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
+  UploadedFiles,
 } from '@nestjs/common';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from '@prisma/client';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { FilesInterceptor } from '@nestjs/platform-express';
 
 @ApiTags('Product')
 @ApiBearerAuth()
@@ -21,8 +30,37 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
 
-  @Post(':userId')
-  @ApiOperation({ summary: 'Create a product' })
+  @Post('uplaodImages/:productId')
+  @ApiOperation({ summary: 'Upload product images' })
+  @UseInterceptors(FilesInterceptor('files', 10))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Upload product',
+    description: 'Upload a new product image for the current product',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        files: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @HttpCode(HttpStatus.CREATED)
+  public async uploadProductImages(
+    @UploadedFiles() files: Express.Multer.File[],
+    @Param('productId') productId: string,
+  ) {
+    const result = await this.productService.uploadProductImages(
+      files,
+      productId,
+    );
+
+    return result;
+  }
+
+  @Post('create/:userId')
+  @ApiOperation({ summary: 'Create product' })
   @HttpCode(HttpStatus.CREATED)
   public async create(
     @Body() createProductDto: CreateProductDto,

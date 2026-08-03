@@ -362,8 +362,8 @@ model Product {
   id          String   @id @default(cuid())
   title       String   @db.VarChar(128)
   description String   @db.VarChar(256)
-  price       Int
-  stock       Int
+  price       Int      @default(0)
+  stock       Int      @default(0)
   brand       String   @db.VarChar(64)
   model       String   @db.VarChar(64)
   isActive    Boolean  @default(true)
@@ -373,12 +373,11 @@ model Product {
   userId    String   @map("user_id")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  images      Json?
-
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   categories  ProductCategory[]
+  images  ProductImage[]
   // bookmarks    Bookmark[]
   // comments     Comment[]
   // orderItems   OrderItem[]
@@ -386,6 +385,30 @@ model Product {
   // savedCardItems SavedCartItem[]
 
   @@map("products")
+}
+
+//? <----------------------- Product Image ----------------------->
+model ProductImage {
+  id          String   @id @default(cuid())
+  productId   String   @map("product_id")
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  url         String 
+  publicId    String   @map("public_id") 
+  
+  isActive    Boolean  @default(true) @map("is_active")
+  
+  title       String? 
+  size        Int?   
+  mimeType    String?  @map("mime_type")
+  width       Int?
+  height      Int?
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@index([productId])
+  @@map("product_images")
 }
 
 //? <----------------------- Product Category ----------------------->

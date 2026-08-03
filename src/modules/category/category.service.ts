@@ -38,7 +38,7 @@ export class CategoryService {
         throw new ConflictException('Category with this name already exists');
       }
 
-      let { slug } = dto;
+      let slug = dto.slug;
       if (!slug) {
         slug = dto.name
           .toLowerCase()
