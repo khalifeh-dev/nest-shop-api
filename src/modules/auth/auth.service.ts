@@ -247,53 +247,47 @@ export class AuthService {
 
     return await this.refreshTokenService.revokeToken(userId, deviceId);
   }
-
-  //! Fix Use Transcation Bug !//
+  
   public async refresh(providedRefreshToken: string, deviceDto: DeviceDto) {
     this.logger.info(`🔄️ Refresh user token`, 'AuthService');
+
     let payload;
     const deviceId = this.refreshTokenService.generateDeviceId(deviceDto);
-
+    
     try {
       payload = this.jwtService.verify(providedRefreshToken, {
         secret: this.configService.get('JWT_REFRESH_SECRET_KEY'),
       });
       this.logger.info(`🔑 Token own is user: ${payload?.sub}`, 'AuthService');
-    } catch (error) {
-      this.logger.warn(`🔐 Invalid refresh token attempt`, 'AuthService');
-      throw new UnauthorizedException('Invalid refresh token.');
-    }
 
-    const userId = payload?.sub;
-    const user = await this.userService.secureFindOne(userId);
+      const userId = payload?.sub || payload?.id;
+      const user = await this.userService.secureFindOne(userId);
+      const hashedToken = this.encryption.hashToken(providedRefreshToken);
+      const existingToken = await this.prisma.replica.refreshToken.findFirst({
+        where: {
+          userId,
+          token: hashedToken,
+          isRevoked: false,
+          expiresAt: { gt: new Date() },
+        },
+        orderBy: { createdAt: "desc" }
+      });
 
-    const hashedToken = await this.encryption.hash(providedRefreshToken);
+      if (!existingToken) {
+        this.logger.warn(
+          `⚠️ Refresh token not found or revoked for user: ${userId}`,
+          'AuthService',
+        );
+        throw new UnauthorizedException(
+          'Refresh token not found or already revoked',
+        );
+      }
 
-    const existingToken = await this._read.refreshToken.findFirst({
-      where: {
-        userId,
-        token: hashedToken,
-        isRevoked: false,
-        expiresAt: { gt: new Date() },
-        ...(deviceId && { deviceId }),
-      },
-      select: {
-        id: true,
-        deviceId: true,
-        deviceInfo: true,
-      },
-    });
-
-    if (!existingToken) {
-      this.logger.warn(
-        `⚠️ Refresh token not found or revoked for user: ${userId}`,
-        'AuthService',
-      );
-      throw new UnauthorizedException(
-        'Refresh token not found or already revoked',
-      );
-    }
-
+    const newRefreshToken = await this.refreshTokenService.createRefreshToken(
+      userId,
+      deviceDto,
+    );
+    
     const result = await this.prisma.transaction(async (prisma) => {
       await prisma.refreshToken.update({
         where: { id: existingToken.id },
@@ -317,44 +311,43 @@ export class AuthService {
         },
       });
 
-      const newRefreshToken = await this.refreshTokenService.createRefreshToken(
-        userId,
-        deviceDto,
-      );
-
       await this.userService.updateRefreshToken(userId, newRefreshToken.id);
       return newRefreshToken;
     });
 
-    this.logger.info(
-      `✅ Create a new refresh token for user: ${user.id}`,
-      'AuthService',
-    );
+      this.logger.info(
+        `✅ Create a new refresh token for user: ${user.id}`,
+        'AuthService',
+      );
 
-    const accessPayload = {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      userName: user.userName,
-      // role: user?.role,
-    };
+      const accessPayload = {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        userName: user.userName,
+        // role: user?.role,
+      };
 
-    const newAccessToken = this.jwtService.sign(accessPayload, {
-      secret: this.configService.get('JWT_ACCESS_SECRET_KEY'),
-      expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION') || '15m',
-    });
+      const newAccessToken = this.jwtService.sign(accessPayload, {
+        secret: this.configService.get('JWT_ACCESS_SECRET_KEY'),
+        expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION') || '15m',
+      });
 
-    this.logger.info(
-      `✅ Create a new access token for user: ${user.id}`,
-      'AuthService',
-    );
+      this.logger.info(
+        `✅ Create a new access token for user: ${user.id}`,
+        'AuthService',
+      );
 
-    return {
-      user,
-      accessToken: newAccessToken,
-      refreshToken: result.token,
-    };
+      return {
+        user,
+        accessToken: newAccessToken,
+        refreshToken: result.token,
+      };
+    } catch (error) {
+      this.logger.warn(`🔐 Invalid refresh token attempt`, 'AuthService');
+      throw new UnauthorizedException('Invalid refresh token.');
+    }
   }
 
   public async OAuth(dto: OAuthUser, deviceInfo: DeviceDto) {

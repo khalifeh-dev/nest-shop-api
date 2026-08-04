@@ -104,8 +104,7 @@ export class RefreshTokenService {
         expiresIn: this.configService.get('JWT_REFRESH_EXPIRATION') || '14d',
       });
 
-      const hashedToken = await this.encryption.hash(newToken);
-
+      const hashedToken = this.encryption.hashToken(newToken);
       const token = await this._write.refreshToken.create({
         data: {
           token: hashedToken,

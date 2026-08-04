@@ -32,6 +32,7 @@ import { EmailService } from '../../common/services/email/email.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { AuthGuard } from '@nestjs/passport';
 import { OAuthUser } from '../../common/types/oauth.type';
+import { JwtRefreshGuard } from '../../common/guards/jwt-refresh.guard';
 
 @ApiTags('Auth')
 @ApiBearerAuth()
@@ -116,7 +117,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Logot current user' })
   @HttpCode(HttpStatus.OK)
   public async signOut(
-    @Res() res: Response,
+    @Res({ passthrough: true }) res: Response,
     @CurrentUser('sub') userId: string,
     deviceId: string,
   ) {
@@ -131,7 +132,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Logot all user devices' })
   @HttpCode(HttpStatus.OK)
   public async signOutAll(
-    @Res() res: Response,
+    @Res({ passthrough: true }) res: Response,
     @CurrentUser('sub') userId: string,
   ) {
     const result = await this.authService.signOutAll(userId);
@@ -145,23 +146,25 @@ export class AuthController {
   @ApiOperation({ summary: 'Logot a device' })
   @HttpCode(HttpStatus.OK)
   public async signOutDevice(
-    @Res() res: Response,
+    @Res({ passthrough: true }) res: Response,
     @CurrentUser('sub') userId: string,
     deviceId: string,
   ) {
     const result = await this.authService.signOutDevice(userId, deviceId);
-
     this.clearAuthCookies(res);
-
     return result;
   }
 
+  @Public()
   @Post('refresh')
+  @UseGuards(JwtRefreshGuard)
   @ApiOperation({ summary: 'refresh access token' })
   @HttpCode(HttpStatus.OK)
-  public async refreshToken(@Req() req: Request, @Res() res: Response) {
+  public async refreshToken(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const clientData: DeviceInfo = DeviceUtil.extractDeviceInfo(req);
-
     const refreshToken = req.cookies['refresh-token'];
     if (!refreshToken)
       throw new UnauthorizedException('Refresh token missing.');
@@ -170,7 +173,6 @@ export class AuthController {
       refreshToken,
       clientData,
     );
-
     this.setAuthCookies(res, tokens);
 
     return {
@@ -277,7 +279,7 @@ export class AuthController {
 
   private async handleOAuthRedirect(
     @Req() req: Request & { user: OAuthUser },
-    @Res() res: Response,
+    @Res({ passthrough: true }) res: Response,
   ) {
     const oAuthUser = req.user;
     const deviceInfo = DeviceUtil.extractDeviceInfo(req);

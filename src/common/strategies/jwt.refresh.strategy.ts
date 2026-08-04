@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Strategy } from 'passport-jwt';
 import { JWTPayload, UserDataSummary } from '../types/jwt.type';
+import type { Request } from "express"
 
 @Injectable()
 export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
@@ -14,9 +15,12 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
       throw new Error('JWT Refresh Secret Key Is Not Defined ❌.');
 
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: (req: Request) => {
+        return req.cookies?.['refresh-token'] || null;
+      },
       ignoreExpiration: false,
       secretOrKey: refreshTokenSecretKey,
+      passReqToCallback: true,
     });
   }
 

@@ -149,6 +149,9 @@ export class UserService {
 
   public async findOne(id: string): Promise<SanitizeUser> {
     try {
+      if (!id) {
+        throw new BadRequestException('User ID is required');
+      }
       this.logger.debug(`🔍 Finding user: ${id}`, 'UserService');
       const user: User = await this._read.user.findUnique({ where: { id } });
       if (!user) {
