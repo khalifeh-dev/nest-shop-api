@@ -10,6 +10,7 @@ import {
   HttpStatus,
   UseInterceptors,
   UploadedFiles,
+  Query,
 } from '@nestjs/common';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -20,9 +21,12 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { FindAllUserDto } from '../user/dto/find-all.dto';
+import { Pagination } from '../../common/types/pagination.type';
 
 @ApiTags('Product')
 @ApiBearerAuth()
@@ -67,13 +71,42 @@ export class ProductController {
     @Param('userId') userId: string,
   ): Promise<Product> {
     const result = this.productService.create(createProductDto, userId);
-
     return result;
   }
 
   @Get()
-  public async findAll() {
-    return this.productService.findAll();
+  @ApiOperation({ summary: 'Get all product' })
+  @HttpCode(HttpStatus.CREATED)
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'search', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'sortOrder', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, example: '' })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number, example: '' })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number, example: '' })
+  @ApiQuery({ name: 'isActive', required: false, type: Boolean, example: '' })
+  @ApiQuery({ name: 'inStock', required: false, type: Boolean, example: '' })
+  @ApiQuery({ name: 'brand', required: false, type: String, example: '' })
+  public async findAll(
+    @Query() dto: FindAllUserDto,
+  ): Promise<Pagination<Product>> {
+    const result = await this.productService.findAll(dto);
+
+    const { data: allData, limit: lim, page: pg, total, pages } = result;
+
+    return {
+      data: allData,
+      pagination: {
+        page: pg,
+        limit: lim,
+        total,
+        pages,
+        hasNext: pg < pages,
+        hasPrev: pg > 1,
+        nextPage: pg < pages ? pg + 1 : null,
+        prevPage: pg > 1 ? pg - 1 : null,
+      },
+    };
   }
 
   @Get(':id')

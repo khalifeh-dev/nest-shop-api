@@ -1,9 +1,25 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  HttpCode,
+  HttpStatus,
+  Query,
+} from '@nestjs/common';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Category } from '@prisma/client';
+import { Pagination } from '../../common/types/pagination.type';
+import type {
+  CategoryFilter,
+  CategoryResponse,
+} from '../../common/types/categoryResponse.type';
 
 @ApiTags('Category')
 @ApiBearerAuth()
@@ -17,12 +33,34 @@ export class CategoryController {
   public async create(@Body() dto: CreateCategoryDto): Promise<Category> {
     const result = await this.categoryService.create(dto);
 
-    return result
+    return result;
   }
 
   @Get()
-  public async findAll() {
-    return this.categoryService.findAll();
+  @ApiOperation({ summary: 'Get all category' })
+  @HttpCode(HttpStatus.CREATED)
+  public async findAll(
+    @Query('limit') limit: number = 20,
+    @Query('page') page: number = 1,
+    @Query('filter') filter: CategoryFilter = { isActive: false },
+  ): Promise<Pagination<CategoryResponse>> {
+    const result = await this.categoryService.findAll(limit, page, filter);
+
+    const { data: allData, limit: lim, page: pg, total, pages } = result;
+
+    return {
+      data: allData,
+      pagination: {
+        page: pg,
+        limit: lim,
+        total,
+        pages,
+        hasNext: pg < pages,
+        hasPrev: pg > 1,
+        nextPage: pg < pages ? pg + 1 : null,
+        prevPage: pg > 1 ? pg - 1 : null,
+      },
+    };
   }
 
   @Get(':id')
@@ -31,7 +69,10 @@ export class CategoryController {
   }
 
   @Patch(':id')
-  public async update(@Param('id') id: string, @Body() updateCategoryDto: UpdateCategoryDto) {
+  public async update(
+    @Param('id') id: string,
+    @Body() updateCategoryDto: UpdateCategoryDto,
+  ) {
     return this.categoryService.update(+id, updateCategoryDto);
   }
 

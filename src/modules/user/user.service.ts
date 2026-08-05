@@ -25,6 +25,7 @@ import { GetUserNotificationsDto } from '../../common/services/notification/dto'
 import type { LoggerService } from '../../common/services/logger/logger-options.interface';
 import { OnQueueRemoved } from '@nestjs/bull';
 import { ErrorUtil } from '../../common/utils/error.util';
+import { Pagination } from '../../common/utils/pagination';
 
 @Injectable()
 export class UserService {
@@ -101,8 +102,10 @@ export class UserService {
         isDeleted,
       } = dto;
 
-      const finalLimit = Math.min(Math.max(limit, 1), 50);
-      const skip = (page - 1) * finalLimit;
+      // const finalLimit = Math.min(Math.max(limit, 1), 50);
+      // const skip = (page - 1) * finalLimit;
+
+      const { finalLimit, skip } = Pagination.values(limit, page)
 
       const where = this.buildWhereClause({
         search,

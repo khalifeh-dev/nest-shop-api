@@ -83,7 +83,7 @@ export class ProductFilterDto {
   @Min(1)
   @Max(50)
   @Transform(({ value }) => Number(value))
-  limit?: number = 20;
+  limit: number = 20;
 
   @ApiProperty({
     example: 1,
@@ -95,7 +95,7 @@ export class ProductFilterDto {
   @IsNumber()
   @Min(1)
   @Transform(({ value }) => Number(value))
-  page?: number = 1;
+  page: number = 1;
 
   @ApiProperty({
     example: 'createdAt',

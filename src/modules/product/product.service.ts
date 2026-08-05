@@ -9,8 +9,11 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { DatabaseService } from '../../common/database/database.service';
 import type { LoggerService } from '../../common/services/logger/logger-options.interface';
 import { ErrorUtil } from '../../common/utils/error.util';
-import { Product } from '@prisma/client';
+import { Prisma, Product } from '@prisma/client';
 import { CloudinaryService } from '../../common/services/cloudinary/cloudinary.service';
+import { ProductFilterDto } from './dto/product-filter.dto';
+import { Pagination } from '../../common/utils/pagination';
+import { FindAll } from '../../common/types/find-all.type';
 
 @Injectable()
 export class ProductService {
@@ -35,7 +38,7 @@ export class ProductService {
       });
 
       if (!product) {
-        throw new NotFoundException(`Product not found with ID ${ productId }`);
+        throw new NotFoundException(`Product not found with ID ${productId}`);
       }
 
       const uploadResults = await this.cloudinaryService.uploadProductImages(
@@ -45,10 +48,8 @@ export class ProductService {
       );
 
       const images = await this.prisma.transaction(async (prisma) => {
-
         const savedImages = await Promise.all(
           uploadResults.map((result, index) => {
-
             return prisma.productImage.create({
               data: {
                 productId,
@@ -176,8 +177,80 @@ export class ProductService {
     }
   }
 
-  public async findAll() {
-    return `This action returns all product`;
+  public async findAll(dto: ProductFilterDto): Promise<FindAll<Product>> {
+    try {
+      this.logger.info(
+        `🔍 Finding all product with page: ${dto.page} & limit: ${dto.limit}`,
+        'ProductService',
+      );
+
+      const {
+        page,
+        limit,
+        search,
+        sortOrder,
+        sortBy,
+        minPrice,
+        maxPrice,
+        isActive,
+        inStock,
+        brand,
+      } = dto;
+
+      const { finalLimit, skip } = Pagination.values(limit, page);
+
+      const where = this.buildFindAllWhereClause({
+        search,
+        minPrice,
+        maxPrice,
+        isActive,
+        inStock,
+        brand,
+      });
+
+      const orderBy = this.buildFindAllOrderBy(sortBy, sortOrder);
+
+      const [data, total] = await Promise.all([
+        this.prisma.replica.product.findMany({
+          where,
+          skip,
+          take: finalLimit,
+          orderBy,
+          include: {
+            categories: {
+              include: {
+                category: true,
+              },
+            },
+            user: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        }),
+        this.prisma.replica.product.count({ where }),
+      ]);
+
+      this.logger.info(`✅ Founded ${data.length} products`, 'ProductService');
+
+      const totalPages = Math.ceil(total / finalLimit);
+
+      return {
+        data,
+        total,
+        limit: finalLimit,
+        page,
+        pages: totalPages,
+      };
+    } catch (error) {
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in find all: ${message}`, 'ProductService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
   }
 
   public async findOne(id: number) {
@@ -190,5 +263,60 @@ export class ProductService {
 
   public async remove(id: number) {
     return `This action removes a #${id} product`;
+  }
+
+  private buildFindAllWhereClause({
+    search,
+    minPrice,
+    maxPrice,
+    isActive,
+    inStock,
+    brand,
+  }: {
+    search?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    isActive?: boolean;
+    inStock?: boolean;
+    brand?: string;
+  }): Prisma.ProductWhereInput {
+    const where: Prisma.ProductWhereInput = {};
+
+    if (isActive !== undefined) where.isActive = isActive;
+    if (brand) where.brand = { contains: brand, mode: 'insensitive' };
+    if (minPrice !== undefined || maxPrice !== undefined) {
+      where.price = {};
+      if (minPrice !== undefined) where.price.gte = minPrice;
+      if (maxPrice !== undefined) where.price.lte = maxPrice;
+    }
+    if (inStock !== undefined)
+      where.stock = inStock ? { gt: 0 } : { equals: 0 };
+
+    if (search?.trim()) {
+      const term = search.trim();
+      where.OR = ['title', 'description', 'brand', 'model'].map((field) => ({
+        [field]: { contains: term, mode: 'insensitive' },
+      }));
+    }
+
+    return where;
+  }
+
+  private buildFindAllOrderBy(
+    sortBy: string = 'createdAt',
+    sortOrder: 'asc' | 'desc' = 'desc',
+  ): Prisma.ProductOrderByWithRelationInput {
+    const allowedFields = [
+      'createdAt',
+      'price',
+      'rating',
+      'title',
+      'updatedAt',
+    ];
+    const field = allowedFields.includes(sortBy) ? sortBy : 'createdAt';
+
+    return {
+      [field]: sortOrder,
+    };
   }
 }

@@ -9,8 +9,11 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { DatabaseService } from '../../common/database/database.service';
 import type { LoggerService } from '../../common/services/logger/logger-options.interface';
-import { Category } from '@prisma/client';
+import { Category, Prisma } from '@prisma/client';
 import { ErrorUtil } from '../../common/utils/error.util';
+import { Pagination } from '../../common/utils/pagination';
+import { FindAll } from '../../common/types/find-all.type';
+import { CategoryResponse } from '../../common/types/categoryResponse.type';
 
 @Injectable()
 export class CategoryService {
@@ -21,10 +24,7 @@ export class CategoryService {
 
   public async create(dto: CreateCategoryDto): Promise<Category> {
     try {
-      this.logger.debug(
-        `📝 Creating category: ${dto.name}`,
-        'CategoryService',
-      );
+      this.logger.debug(`📝 Creating category: ${dto.name}`, 'CategoryService');
 
       const existingName = await this.prisma.replica.category.findUnique({
         where: { name: dto.name },
@@ -88,8 +88,59 @@ export class CategoryService {
     }
   }
 
-  public async findAll() {
-    return `This action returns all category`;
+  public async findAll(
+    limit: number = 20,
+    page: number = 1,
+    filter?: { isActive?: boolean },
+  ): Promise<FindAll<CategoryResponse>> {
+    try {
+      this.logger.info(
+        `🔍 Finding all categories with page: ${page} & limit: ${limit}`,
+        'CategoryService',
+      );
+
+      const { finalLimit, skip } = Pagination.values(limit, page);
+
+      const where: Prisma.CategoryWhereInput = {};
+      if (filter?.isActive) {
+        where.isActive = filter?.isActive;
+      }
+
+      const [data, total] = await Promise.all([
+        this.prisma.replica.category.findMany({
+          where,
+          skip,
+          take: finalLimit,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+          },
+        }),
+        this.prisma.replica.category.count({ where }),
+      ]);
+
+      this.logger.info(
+        `✅ Founded ${data.length} categories`,
+        'CategoryService',
+      );
+
+      const totalPages = Math.ceil(total / finalLimit);
+
+      return {
+        data,
+        limit: finalLimit,
+        page,
+        pages: totalPages,
+        total,
+      };
+    } catch (error) {
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in find all: ${message}`, 'CategoryService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
   }
 
   public async findOne(id: number) {
