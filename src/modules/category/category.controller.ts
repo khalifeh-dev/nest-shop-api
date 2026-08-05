@@ -13,7 +13,12 @@ import {
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Category } from '@prisma/client';
 import { Pagination } from '../../common/types/pagination.type';
 import type {
@@ -64,8 +69,11 @@ export class CategoryController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get a category' })
+  @ApiParam({ name: 'id', description: 'Category ID', type: String })
+  @HttpCode(HttpStatus.OK)
   public async findOne(@Param('id') id: string) {
-    return this.categoryService.findOne(+id);
+    return await this.categoryService.findOne(id);
   }
 
   @Patch(':id')
@@ -73,11 +81,11 @@ export class CategoryController {
     @Param('id') id: string,
     @Body() updateCategoryDto: UpdateCategoryDto,
   ) {
-    return this.categoryService.update(+id, updateCategoryDto);
+    return this.categoryService.update(id, updateCategoryDto);
   }
 
   @Delete(':id')
   public async remove(@Param('id') id: string) {
-    return this.categoryService.remove(+id);
+    return this.categoryService.remove(id);
   }
 }

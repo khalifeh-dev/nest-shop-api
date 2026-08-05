@@ -21,6 +21,7 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
@@ -110,8 +111,11 @@ export class ProductController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get a product' })
+  @ApiParam({ name: 'id', description: 'product ID', type: String })
+  @HttpCode(HttpStatus.OK)
   public async findOne(@Param('id') id: string) {
-    return this.productService.findOne(+id);
+    return await this.productService.findOne(id);
   }
 
   @Patch(':id')
@@ -119,11 +123,11 @@ export class ProductController {
     @Param('id') id: string,
     @Body() updateProductDto: UpdateProductDto,
   ) {
-    return this.productService.update(+id, updateProductDto);
+    return this.productService.update(id, updateProductDto);
   }
 
   @Delete(':id')
   public async remove(@Param('id') id: string) {
-    return this.productService.remove(+id);
+    return this.productService.remove(id);
   }
 }

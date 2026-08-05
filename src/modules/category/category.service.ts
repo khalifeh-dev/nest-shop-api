@@ -143,15 +143,29 @@ export class CategoryService {
     }
   }
 
-  public async findOne(id: number) {
-    return `This action returns a #${id} category`;
+  public async findOne(id: string): Promise<Category> {
+    try {
+      const findCategory = await this.prisma.replica.category.findUnique({
+        where: { id },
+      });
+
+      if (!findCategory)
+        throw new NotFoundException(`Category not found with ID ${id}.`);
+
+      return findCategory;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in find one: ${message}`, 'CategoryService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
   }
 
-  public async update(id: number, updateCategoryDto: UpdateCategoryDto) {
+  public async update(id: string, updateCategoryDto: UpdateCategoryDto) {
     return `This action updates a #${id} category`;
   }
 
-  public async remove(id: number) {
+  public async remove(id: string) {
     return `This action removes a #${id} category`;
   }
 }

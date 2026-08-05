@@ -14,6 +14,7 @@ import { CloudinaryService } from '../../common/services/cloudinary/cloudinary.s
 import { ProductFilterDto } from './dto/product-filter.dto';
 import { Pagination } from '../../common/utils/pagination';
 import { FindAll } from '../../common/types/find-all.type';
+import { UserService } from '../user/user.service';
 
 @Injectable()
 export class ProductService {
@@ -21,6 +22,7 @@ export class ProductService {
     private prisma: DatabaseService,
     @Inject('LoggerService') private logger: LoggerService,
     private cloudinaryService: CloudinaryService,
+    private userService: UserService,
   ) {}
 
   public async uploadProductImages(
@@ -86,6 +88,8 @@ export class ProductService {
 
   public async create(dto: CreateProductDto, userId: string): Promise<Product> {
     try {
+      await this.userService.secureFindOne(userId);
+
       const { categoryIds, ...productData } = dto;
 
       this.logger.debug(
@@ -253,15 +257,29 @@ export class ProductService {
     }
   }
 
-  public async findOne(id: number) {
-    return `This action returns a #${id} product`;
+  public async findOne(id: string): Promise<Product> {
+    try {
+      const findProduct = await this.prisma.replica.product.findUnique({
+        where: { id },
+      });
+
+      if (!findProduct)
+        throw new NotFoundException(`Product not found with ID ${id}.`);
+
+      return findProduct;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in find one: ${message}`, 'ProductService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
   }
 
-  public async update(id: number, updateProductDto: UpdateProductDto) {
+  public async update(id: string, updateProductDto: UpdateProductDto) {
     return `This action updates a #${id} product`;
   }
 
-  public async remove(id: number) {
+  public async remove(id: string) {
     return `This action removes a #${id} product`;
   }
 
