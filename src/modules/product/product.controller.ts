@@ -125,19 +125,35 @@ export class ProductController {
     @Param('id') id: string,
     @Body() updateProductDto: UpdateProductDto,
   ): Promise<Product> {
-    
     const result = await this.productService.update(id, updateProductDto);
 
-    return result
-
+    return result;
   }
 
-  @Delete(':id')
-    @ApiOperation({ summary: 'Remove product' })
+  @Delete(':id/soft-delete')
+  @ApiOperation({ summary: 'Soft delete product' })
   @HttpCode(HttpStatus.OK)
   public async remove(@Param('id') id: string): Promise<Product> {
     const result = await this.productService.remove(id);
 
-    return result
+    return result;
+  }
+
+  @Delete(':id/hard-delete')
+  @ApiOperation({ summary: 'Hard delete product' })
+  @HttpCode(HttpStatus.OK)
+  public async hardDelete(@Param('id') id: string): Promise<Product> {
+    const result = await this.productService.hardDelete(id);
+
+    return result;
+  }
+
+  @Patch(':id/restore')
+  @ApiOperation({ summary: 'Restore product' })
+  @HttpCode(HttpStatus.OK)
+  public async restore(@Param('id') id: string): Promise<Product> {
+    const result = await this.productService.restore(id);
+
+    return result;
   }
 }

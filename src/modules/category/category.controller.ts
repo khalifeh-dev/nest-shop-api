@@ -88,7 +88,7 @@ export class CategoryController {
     return result;
   }
 
-  @Delete('hard-delete/:id')
+  @Delete(':id/hard-delete')
   @ApiOperation({ summary: 'Hard delete category' })
   @HttpCode(HttpStatus.OK)
   public async remove(@Param('id') id: string): Promise<Category> {
@@ -97,7 +97,7 @@ export class CategoryController {
     return result;
   }
 
-  @Delete('soft-delete/:id')
+  @Delete(':id/soft-delete')
   @ApiOperation({ summary: 'Soft delete category' })
   @HttpCode(HttpStatus.OK)
   public async softDelete(@Param('id') id: string): Promise<Category> {

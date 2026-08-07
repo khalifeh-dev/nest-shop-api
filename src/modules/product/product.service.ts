@@ -367,6 +367,39 @@ export class ProductService {
     }
   }
 
+  public async hardDelete(id: string): Promise<Product> {
+    try {
+      this.logger.info(`🗑️ Hard deleting product: ${id}`, 'ProductService');
+
+      await this.findOne(id);
+
+      const product = await this.prisma.replica.product.findUnique({
+        where: { id },
+        include: { images: true },
+      });
+
+      if (product?.images && product.images.length > 0) {
+        for (const image of product.images) {
+          await this.cloudinaryService.deleteFile(image.publicId);
+        }
+        this.logger.info(`🗑️ Deleted ${product.images.length} images from Cloudinary`, 'ProductService');
+      }
+
+      const deletedProduct = await this.prisma.master.product.delete({
+        where: { id },
+      });
+
+      this.logger.info(`✅ Product hard deleted: ${id}`, 'ProductService');
+
+      return deletedProduct;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in hard delete: ${message}`, 'ProductService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
   public async restore(id: string): Promise<Product> {
     try {
       this.logger.info(`♻️ Restoring product: ${id}`, 'ProductService');
