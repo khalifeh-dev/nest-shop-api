@@ -259,10 +259,14 @@ export class ProductService {
     }
   }
 
-  public async findOne(id: string): Promise<Product> {
+  public async findOne(
+    id: string,
+    options?: Omit<Prisma.ProductFindUniqueArgs, 'where'>,
+  ): Promise<Product> {
     try {
       const findProduct = await this.prisma.replica.product.findUnique({
         where: { id },
+        ...options,
       });
 
       if (!findProduct)
@@ -270,6 +274,9 @@ export class ProductService {
 
       if (findProduct.isDeleted)
         throw new BadRequestException(`This product has already been removed.`);
+
+      if (!findProduct.isActive)
+        throw new BadRequestException('Product is not active');
 
       return findProduct;
     } catch (error) {
@@ -457,6 +464,253 @@ export class ProductService {
       await this.prisma.master.product.delete({
         where: { id: product.id },
       });
+    }
+  }
+
+  public async decreaseStock(
+    productId: string,
+    quantity: number = 1,
+  ): Promise<Product> {
+    try {
+      this.logger.info(
+        `📦 Decreasing stock for product ${productId} by ${quantity}`,
+        'ProductService',
+      );
+
+      const product = await this.findOne(productId, {
+        select: { id: true, title: true, stock: true, isActive: true },
+      });
+
+      if (product.stock < quantity) {
+        this.logger.warn(
+          `⚠️ Insufficient stock for product ${productId}: requested ${quantity}, available ${product.stock}`,
+          'ProductService',
+        );
+        throw new BadRequestException(
+          `Insufficient stock. Available: ${product.stock}, Requested: ${quantity}`,
+        );
+      }
+
+      const updatedProduct = await this.prisma.transaction(async (prisma) => {
+        const updated = await prisma.product.update({
+          where: { id: productId },
+          data: {
+            stock: {
+              decrement: quantity,
+            },
+          },
+        });
+
+        return updated;
+      });
+
+      this.logger.info(
+        `✅ Stock decreased for product ${productId}: ${product.stock} → ${updatedProduct.stock}`,
+        'ProductService',
+      );
+
+      return updatedProduct;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `⛔ Error in decreaseStock: ${message}`,
+        'ProductService',
+      );
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async increaseStock(
+    productId: string,
+    quantity: number = 1,
+  ): Promise<Product> {
+    try {
+      this.logger.info(
+        `📦 Increasing stock for product ${productId} by ${quantity}`,
+        'ProductService',
+      );
+
+      const product = await this.findOne(productId, {
+        select: { id: true, title: true, stock: true, isActive: true },
+      });
+
+      const updatedProduct = await this.prisma.transaction(async (prisma) => {
+        const updated = await prisma.product.update({
+          where: { id: productId },
+          data: {
+            stock: {
+              increment: quantity,
+            },
+          },
+        });
+
+        return updated;
+      });
+
+      this.logger.info(
+        `✅ Stock increased for product ${productId}: ${product.stock} → ${updatedProduct.stock}`,
+        'ProductService',
+      );
+
+      return updatedProduct;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `⛔ Error in increaseStock: ${message}`,
+        'ProductService',
+      );
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async checkStock(
+    productId: string,
+    quantity?: number,
+  ): Promise<{
+    id: string;
+    title: string;
+    stock: number;
+    isAvailable: boolean;
+    requestedQuantity?: number;
+  }> {
+    try {
+      this.logger.debug(
+        `🔍 Checking stock for product ${productId}`,
+        'ProductService',
+      );
+
+      const product = await this.findOne(productId, {
+        select: {
+          id: true,
+          title: true,
+          stock: true,
+          isActive: true,
+        },
+      });
+
+      const isAvailable = product.isActive && product.stock > 0;
+
+      if (quantity !== undefined && quantity > 0) {
+        const hasEnoughStock = product.stock >= quantity;
+        return {
+          ...product,
+          isAvailable: isAvailable && hasEnoughStock,
+          requestedQuantity: quantity,
+        };
+      }
+
+      return {
+        ...product,
+        isAvailable,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in checkStock: ${message}`, 'ProductService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async setStock(productId: string, newStock: number): Promise<Product> {
+    try {
+      this.logger.info(
+        `📦 Setting stock for product ${productId} to ${newStock}`,
+        'ProductService',
+      );
+
+      if (newStock < 0)
+        throw new BadRequestException('Stock cannot be negative');
+
+      const product = await this.findOne(productId, {
+        select: { id: true, title: true, stock: true },
+      });
+
+      const updatedProduct = await this.prisma.master.product.update({
+        where: { id: productId },
+        data: {
+          stock: newStock,
+        },
+      });
+
+      this.logger.info(
+        `✅ Stock set for product ${productId}: ${product.stock} → ${newStock}`,
+        'ProductService',
+      );
+
+      return updatedProduct;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in setStock: ${message}`, 'ProductService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  public async checkMultipleStock(
+    items: { productId: string; quantity: number }[],
+  ): Promise<{
+    allAvailable: boolean;
+    items: {
+      productId: string;
+      title: string;
+      stock: number;
+      requested: number;
+      available: boolean;
+    }[];
+  }> {
+    try {
+      this.logger.debug(
+        `🔍 Checking stock for ${items.length} products`,
+        'ProductService',
+      );
+
+      const productIds = items.map((item) => item.productId);
+
+      const products = await this.prisma.replica.product.findMany({
+        where: {
+          id: { in: productIds },
+          isActive: true,
+        },
+        select: {
+          id: true,
+          title: true,
+          stock: true,
+        },
+      });
+
+      const productMap = new Map(products.map((p) => [p.id, p]));
+
+      const result = items.map((item) => {
+        const product = productMap.get(item.productId);
+        const available = !!product && product.stock >= item.quantity;
+
+        return {
+          productId: item.productId,
+          title: product?.title || 'Unknown',
+          stock: product?.stock || 0,
+          requested: item.quantity,
+          available,
+        };
+      });
+
+      const allAvailable = result.every((item) => item.available);
+
+      return {
+        allAvailable,
+        items: result,
+      };
+    } catch (error) {
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `⛔ Error in checkMultipleStock: ${message}`,
+        'ProductService',
+      );
+      throw new InternalServerErrorException('Internal Server Error.');
     }
   }
 

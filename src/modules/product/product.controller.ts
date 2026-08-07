@@ -156,4 +156,57 @@ export class ProductController {
 
     return result;
   }
+
+  @Patch(':id/stock/decrease')
+  @ApiOperation({ summary: 'Decrease product stock' })
+  @HttpCode(HttpStatus.OK)
+  public async decreaseStock(
+    @Param('id') productId: string,
+    @Query('quantity') quantity?: string,
+  ): Promise<Product> {
+    const qty = quantity ? parseInt(quantity, 10) : 1;
+    return await this.productService.decreaseStock(productId, qty);
+  }
+
+  @Patch(':id/stock/increase')
+  @ApiOperation({ summary: 'Increase product stock' })
+  @HttpCode(HttpStatus.OK)
+  public async increaseStock(
+    @Param('id') productId: string,
+    @Query('quantity') quantity?: string,
+  ): Promise<Product> {
+    const qty = quantity ? parseInt(quantity, 10) : 1;
+    return await this.productService.increaseStock(productId, qty);
+  }
+
+  @Get(':id/stock')
+  @ApiOperation({ summary: 'Check product stock' })
+  @HttpCode(HttpStatus.OK)
+  public async checkStock(
+    @Param('id') productId: string,
+    @Query('quantity') quantity?: string,
+  ): Promise<any> {
+    const qty = quantity ? parseInt(quantity, 10) : undefined;
+    return await this.productService.checkStock(productId, qty);
+  }
+
+  @Patch(':id/stock/set')
+  @ApiOperation({ summary: 'Set product stock' })
+  @HttpCode(HttpStatus.OK)
+  public async setStock(
+    @Param('id') productId: string,
+    @Query('stock') stock: string,
+  ): Promise<Product> {
+    const newStock = parseInt(stock, 10);
+    return await this.productService.setStock(productId, newStock);
+  }
+
+  @Post('stock/check-multiple')
+  @ApiOperation({ summary: 'Check multiple products stock' })
+  @HttpCode(HttpStatus.OK)
+  public async checkMultipleStock(
+    @Body() items: { productId: string; quantity: number }[],
+  ): Promise<any> {
+    return await this.productService.checkMultipleStock(items);
+  }
 }
