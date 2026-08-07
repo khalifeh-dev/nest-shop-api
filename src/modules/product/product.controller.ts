@@ -133,7 +133,11 @@ export class ProductController {
   }
 
   @Delete(':id')
-  public async remove(@Param('id') id: string) {
-    return this.productService.remove(id);
+    @ApiOperation({ summary: 'Remove product' })
+  @HttpCode(HttpStatus.OK)
+  public async remove(@Param('id') id: string): Promise<Product> {
+    const result = await this.productService.remove(id);
+
+    return result
   }
 }

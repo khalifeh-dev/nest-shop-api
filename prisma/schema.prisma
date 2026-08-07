@@ -359,25 +359,27 @@ model UserRole {
 
 //? <----------------------- Product ----------------------->
 model Product {
-  id          String   @id @default(cuid())
-  title       String   @db.VarChar(128)
-  description String   @db.VarChar(256)
-  price       Int      @default(0)
-  stock       Int      @default(0)
-  brand       String   @db.VarChar(64)
-  model       String   @db.VarChar(64)
-  isActive    Boolean  @default(true)
+  id          String    @id @default(cuid())
+  title       String    @db.VarChar(128)
+  description String    @db.VarChar(256)
+  price       Int       @default(0)
+  stock       Int       @default(0)
+  brand       String    @db.VarChar(64)
+  model       String    @db.VarChar(64)
+  isActive    Boolean   @default(true)
   discount    Int
   rating      Float
+  deletedAt   DateTime? @map("deleted_at")
+  isDeleted   Boolean   @default(false) @map("is_deleted")
+ 
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   categories  ProductCategory[]
-  images  ProductImage[]
+  images      ProductImage[]
   // bookmarks    Bookmark[]
   // comments     Comment[]
   // orderItems   OrderItem[]
@@ -435,6 +437,8 @@ model Category {
   updatedAt   DateTime @updatedAt
   
   isActive    Boolean  @default(true)
+  deletedAt   DateTime? @map("deleted_at")
+  isDeleted   Boolean   @default(false) @map("is_deleted")
 
   products    ProductCategory[]
 

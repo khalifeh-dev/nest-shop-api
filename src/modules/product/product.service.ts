@@ -16,7 +16,7 @@ import { ProductFilterDto } from './dto/product-filter.dto';
 import { Pagination } from '../../common/utils/pagination';
 import { FindAll } from '../../common/types/find-all.type';
 import { UserService } from '../user/user.service';
-import { pick } from 'lodash';
+import { find, pick } from 'lodash';
 
 @Injectable()
 export class ProductService {
@@ -268,6 +268,9 @@ export class ProductService {
       if (!findProduct)
         throw new NotFoundException(`Product not found with ID ${id}.`);
 
+      if (findProduct.isDeleted)
+        throw new BadRequestException(`This product has already been removed.`);
+
       return findProduct;
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
@@ -336,13 +339,32 @@ export class ProductService {
       if (error instanceof NotFoundException) throw error;
       if (error instanceof BadRequestException) throw error;
       const message = ErrorUtil.getMessage(error);
-      this.logger.error(`⛔ Error in find one: ${message}`, 'ProductService');
+      this.logger.error(`⛔ Error in update: ${message}`, 'ProductService');
       throw new InternalServerErrorException('Internal Server Error.');
     }
   }
 
-  public async remove(id: string) {
-    return `This action removes a #${id} product`;
+  public async remove(id: string): Promise<Product> {
+    try {
+      this.logger.info(`🗑️ Soft deleting product: ${id}`, 'ProductService');
+
+      await this.findOne(id);
+
+      const deletedProduct = await this.prisma.master.product.update({
+        where: { id },
+        data: { isActive: false, isDeleted: true, deletedAt: new Date() },
+      });
+
+      this.logger.info(`✅ Product soft deleted: ${id}`, 'ProductService');
+
+      return deletedProduct;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in remove: ${message}`, 'ProductService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
   }
 
   private buildFindAllWhereClause({

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -14,7 +15,6 @@ import { ErrorUtil } from '../../common/utils/error.util';
 import { Pagination } from '../../common/utils/pagination';
 import { FindAll } from '../../common/types/find-all.type';
 import { CategoryResponse } from '../../common/types/categoryResponse.type';
-import { pick } from 'lodash';
 
 @Injectable()
 export class CategoryService {
@@ -196,7 +196,94 @@ export class CategoryService {
     }
   }
 
-  public async remove(id: string) {
-    return `This action removes a #${id} category`;
+  public async remove(id: string): Promise<Category> {
+    try {
+      this.logger.info(`🗑️ Hard deleting category: ${id}`, 'CategoryService');
+
+      const category = await this.prisma.replica.category.findUnique({
+        where: { id },
+        include: {
+          products: true,
+        },
+      });
+
+      if (!category) {
+        throw new NotFoundException(`Category not found with ID: ${id}`);
+      }
+
+      if (category.products.length > 0) {
+        throw new BadRequestException(
+          `Cannot delete category with ${category.products.length} products attached. Remove products first.`,
+        );
+      }
+
+      const deletedCategory = await this.prisma.master.category.delete({
+        where: { id },
+      });
+
+      this.logger.info(`✅ Category hard deleted: ${id}`, 'CategoryService');
+
+      return deletedCategory;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in find one: ${message}`, 'CategoryService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
   }
+
+  public async softDelete(id: string): Promise<Category> {
+    try {
+      this.logger.info(`🗑️ Soft deleting category: ${id}`, 'CategoryService');
+      const category = await this.prisma.replica.category.findUnique({
+        where: { id },
+        include: {
+          products: true,
+        },
+      });
+
+      if (!category) {
+        throw new NotFoundException('Category not found');
+      }
+
+      if (category.products.length > 0) {
+        this.logger.warn(
+          `⚠️ Category ${id} has ${category.products.length} products attached. They will remain but category will be hidden.`,
+          'CategoryService',
+        );
+      }
+
+      const deletedCategory = await this.prisma.master.category.update({
+        where: { id },
+        data: {
+          isActive: false,
+          deletedAt: new Date(),
+        },
+        include: {
+          products: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  title: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      this.logger.info(`✅ Category soft deleted: ${id}`, 'CategoryService');
+
+      return deletedCategory;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in find one: ${message}`, 'CategoryService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
 }

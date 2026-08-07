@@ -88,8 +88,21 @@ export class CategoryController {
     return result;
   }
 
-  @Delete(':id')
-  public async remove(@Param('id') id: string) {
-    return this.categoryService.remove(id);
+  @Delete('hard-delete/:id')
+  @ApiOperation({ summary: 'Hard delete category' })
+  @HttpCode(HttpStatus.OK)
+  public async remove(@Param('id') id: string): Promise<Category> {
+    const result = await this.categoryService.remove(id);
+
+    return result;
+  }
+
+  @Delete('soft-delete/:id')
+  @ApiOperation({ summary: 'Soft delete category' })
+  @HttpCode(HttpStatus.OK)
+  public async softDelete(@Param('id') id: string): Promise<Category> {
+    const result = await this.categoryService.softDelete(id);
+
+    return result;
   }
 }
