@@ -382,7 +382,10 @@ export class ProductService {
         for (const image of product.images) {
           await this.cloudinaryService.deleteFile(image.publicId);
         }
-        this.logger.info(`🗑️ Deleted ${product.images.length} images from Cloudinary`, 'ProductService');
+        this.logger.info(
+          `🗑️ Deleted ${product.images.length} images from Cloudinary`,
+          'ProductService',
+        );
       }
 
       const deletedProduct = await this.prisma.master.product.delete({
@@ -395,7 +398,10 @@ export class ProductService {
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       const message = ErrorUtil.getMessage(error);
-      this.logger.error(`⛔ Error in hard delete: ${message}`, 'ProductService');
+      this.logger.error(
+        `⛔ Error in hard delete: ${message}`,
+        'ProductService',
+      );
       throw new InternalServerErrorException('Internal Server Error.');
     }
   }
@@ -428,6 +434,29 @@ export class ProductService {
       const message = ErrorUtil.getMessage(error);
       this.logger.error(`⛔ Error in restore: ${message}`, 'ProductService');
       throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
+  async cleanupDeletedProducts() {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const products = await this.prisma.replica.product.findMany({
+      where: {
+        isActive: false,
+        isDeleted: true,
+        deletedAt: { lt: thirtyDaysAgo },
+      },
+      include: { images: true },
+    });
+
+    for (const product of products) {
+      for (const image of product.images) {
+        await this.cloudinaryService.deleteFile(image.publicId);
+      }
+      await this.prisma.master.product.delete({
+        where: { id: product.id },
+      });
     }
   }
 

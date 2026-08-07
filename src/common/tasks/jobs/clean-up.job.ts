@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { RefreshTokenService } from '../../services/refresh-token/refresh-token.service';
 import { VerifyCodeService } from '../../services/verify-code/verify-code.service';
 import { NotificationService } from '../../services/notification/notification.service';
+import { ProductService } from '../../../modules/product/product.service';
 
 @Injectable()
 export class CleanUpJob {
@@ -9,6 +10,7 @@ export class CleanUpJob {
     private refreshTokenService: RefreshTokenService,
     private verifyCodeService: VerifyCodeService,
     private notificationService: NotificationService,
+    private productService: ProductService
   ) {}
 
   public async cleanUpRefreshTokens() {
@@ -24,5 +26,10 @@ export class CleanUpJob {
   public async cleanUpNotifications() {
     await this.notificationService.removeOldNotificationsSmartStructured(30);
     return true;
+  }
+
+  public async cleanupProducts () {
+    await this.productService.cleanupDeletedProducts()
+    return true
   }
 }

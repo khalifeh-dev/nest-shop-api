@@ -4,10 +4,9 @@ import { CleanUpJob } from './jobs/clean-up.job';
 
 @Injectable()
 export class TasksService {
-
   constructor(private cleanUpJob: CleanUpJob) {}
 
-  @Cron("0 0 1 * *")
+  @Cron('0 0 1 * *')
   public async cleanRefreshTokens() {
     return await this.cleanUpJob.cleanUpRefreshTokens();
   }
@@ -17,8 +16,13 @@ export class TasksService {
     return await this.cleanUpJob.cleanUpVerifyCode();
   }
 
-  @Cron("0 0 1 * *")
+  @Cron('0 0 1 * *')
   public async cleanupNotifications() {
     return await this.cleanUpJob.cleanUpNotifications();
+  }
+
+  @Cron(CronExpression.EVERY_WEEKEND)
+  public async cleanupProducts() {
+    return await this.cleanupProducts();
   }
 }
