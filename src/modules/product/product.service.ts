@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -15,6 +16,7 @@ import { ProductFilterDto } from './dto/product-filter.dto';
 import { Pagination } from '../../common/utils/pagination';
 import { FindAll } from '../../common/types/find-all.type';
 import { UserService } from '../user/user.service';
+import { pick } from 'lodash';
 
 @Injectable()
 export class ProductService {
@@ -275,8 +277,68 @@ export class ProductService {
     }
   }
 
-  public async update(id: string, updateProductDto: UpdateProductDto) {
-    return `This action updates a #${id} product`;
+  public async update(id: string, dto: UpdateProductDto): Promise<Product> {
+    try {
+      this.logger.info(`🔄️ Update product: ${id}`, 'ProductService');
+
+      await this.findOne(id);
+
+      const { categoryIds, ...productData } = dto;
+      const updateData: any = { ...productData };
+
+      if (categoryIds) {
+        if (categoryIds.length === 0) {
+          throw new BadRequestException('At least one category is required');
+        }
+
+        const existingCategories = await this.prisma.replica.category.findMany({
+          where: { id: { in: categoryIds }, isActive: true },
+          select: { id: true },
+        });
+
+        if (existingCategories.length !== categoryIds.length) {
+          const foundIds = existingCategories.map((c) => c.id);
+          const missingIds = categoryIds.filter((id) => !foundIds.includes(id));
+          throw new BadRequestException(
+            `Categories not found: ${missingIds.join(', ')}`,
+          );
+        }
+
+        updateData.categories = {
+          set: categoryIds.map((id) => ({ id })),
+        };
+      }
+
+      const updateProduct = await this.prisma.master.product.update({
+        where: { id },
+        data: updateData,
+        include: {
+          categories: {
+            include: {
+              category: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      });
+
+      this.logger.info(`✅ Product updated: ${id}`, 'ProductService');
+
+      return updateProduct;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in find one: ${message}`, 'ProductService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
   }
 
   public async remove(id: string) {

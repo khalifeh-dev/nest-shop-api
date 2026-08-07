@@ -14,6 +14,7 @@ import { ErrorUtil } from '../../common/utils/error.util';
 import { Pagination } from '../../common/utils/pagination';
 import { FindAll } from '../../common/types/find-all.type';
 import { CategoryResponse } from '../../common/types/categoryResponse.type';
+import { pick } from 'lodash';
 
 @Injectable()
 export class CategoryService {
@@ -161,8 +162,38 @@ export class CategoryService {
     }
   }
 
-  public async update(id: string, updateCategoryDto: UpdateCategoryDto) {
-    return `This action updates a #${id} category`;
+  public async update(id: string, dto: UpdateCategoryDto): Promise<Category> {
+    try {
+      this.logger.info(`🧩 Updating category: ${id}`, 'CategoryService');
+
+      await this.findOne(id);
+
+      if (dto.slug) {
+        const existing = await this.prisma.replica.category.findFirst({
+          where: {
+            slug: dto.slug,
+            id: { not: id },
+          },
+        });
+        if (existing) {
+          throw new ConflictException('Slug already exists');
+        }
+      }
+
+      const updatedCategory = await this.prisma.master.category.update({
+        where: { id },
+        data: dto,
+      });
+
+      this.logger.info(`✅ updated updated: ${id}`, 'CategoryService');
+
+      return updatedCategory;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in find one: ${message}`, 'CategoryService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
   }
 
   public async remove(id: string) {

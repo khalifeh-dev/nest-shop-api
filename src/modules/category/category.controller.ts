@@ -77,11 +77,15 @@ export class CategoryController {
   }
 
   @Patch(':id')
+  @ApiOperation({ summary: 'Update category' })
+  @HttpCode(HttpStatus.OK)
   public async update(
     @Param('id') id: string,
     @Body() updateCategoryDto: UpdateCategoryDto,
-  ) {
-    return this.categoryService.update(id, updateCategoryDto);
+  ): Promise<Category> {
+    const result = await this.categoryService.update(id, updateCategoryDto);
+
+    return result;
   }
 
   @Delete(':id')

@@ -119,11 +119,17 @@ export class ProductController {
   }
 
   @Patch(':id')
+  @ApiOperation({ summary: 'Update product' })
+  @HttpCode(HttpStatus.OK)
   public async update(
     @Param('id') id: string,
     @Body() updateProductDto: UpdateProductDto,
-  ) {
-    return this.productService.update(id, updateProductDto);
+  ): Promise<Product> {
+    
+    const result = await this.productService.update(id, updateProductDto);
+
+    return result
+
   }
 
   @Delete(':id')

@@ -1,11 +1,26 @@
 import { PartialType, OmitType } from '@nestjs/swagger';
 import { CreateProductDto } from './create-product.dto';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsNumber, IsBoolean, Min, Max } from 'class-validator';
-import { Transform } from 'class-transformer';
+import {
+  IsOptional,
+  IsNumber,
+  IsBoolean,
+  Min,
+  Max,
+  IsString,
+  IsArray,
+  ArrayMinSize,
+  ArrayMaxSize,
+} from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 
 export class UpdateProductDto extends PartialType(
-  OmitType(CreateProductDto, ['title'] as const),
+  OmitType(CreateProductDto, [
+    'title',
+    'price',
+    'stock',
+    'categoryIds',
+  ] as const),
 ) {
   @ApiProperty({
     example: 'iPhone 15 Pro Max (Updated)',
@@ -37,4 +52,48 @@ export class UpdateProductDto extends PartialType(
   @Max(5, { message: 'Rating cannot exceed 5' })
   @Transform(({ value }) => Number(value))
   rating?: number;
+
+  @ApiProperty({
+    example: 999,
+    description: 'Product price (optional)',
+    minimum: 1,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'Price must be a number' })
+  @Min(1, { message: 'Price must be at least 1' })
+  @Type(() => Number)
+  price?: number;
+
+  @ApiProperty({
+    example: 50,
+    description: 'Product stock (optional)',
+    minimum: 0,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'Stock must be a number' })
+  @Min(0, { message: 'Stock cannot be negative' })
+  @Type(() => Number)
+  stock?: number;
+
+  @ApiProperty({
+    examples: [''],
+    description: 'Product categories ID',
+    example: '',
+  })
+  @IsOptional()
+  @IsString({ each: true })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(10)
+  @Transform(({ value }) => {
+    if (Array.isArray(value)) {
+      return value.map((item) =>
+        typeof item === 'string' ? item.trim() : item,
+      );
+    }
+    return value;
+  })
+  categoryIds;
 }
