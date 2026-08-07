@@ -105,4 +105,13 @@ export class CategoryController {
 
     return result;
   }
+
+  @Patch(':id/restore')
+  @ApiOperation({ summary: 'Restore category' })
+  @HttpCode(HttpStatus.OK)
+  public async restore(@Param('id') id: string): Promise<Category> {
+    const result = await this.categoryService.restore(id);
+
+    return result;
+  }
 }

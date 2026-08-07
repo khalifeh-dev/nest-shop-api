@@ -367,6 +367,37 @@ export class ProductService {
     }
   }
 
+  public async restore(id: string): Promise<Product> {
+    try {
+      this.logger.info(`♻️ Restoring product: ${id}`, 'ProductService');
+
+      const product = await this.findOne(id);
+
+      if (product.isActive) {
+        throw new BadRequestException('Product is already active');
+      }
+
+      const restoredProduct = await this.prisma.master.product.update({
+        where: { id },
+        data: {
+          isActive: true,
+          isDeleted: false,
+          deletedAt: null,
+        },
+      });
+
+      this.logger.info(`✅ Product restored: ${id}`, 'ProductService');
+
+      return restoredProduct;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in restore: ${message}`, 'ProductService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
+
   private buildFindAllWhereClause({
     search,
     minPrice,

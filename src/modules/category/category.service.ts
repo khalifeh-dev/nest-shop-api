@@ -153,6 +153,9 @@ export class CategoryService {
       if (!findCategory)
         throw new NotFoundException(`Category not found with ID ${id}.`);
 
+      if (findCategory.isDeleted)
+        throw new NotFoundException(`This category has already been removed.`);
+
       return findCategory;
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
@@ -258,6 +261,7 @@ export class CategoryService {
         where: { id },
         data: {
           isActive: false,
+          isDeleted: true,
           deletedAt: new Date(),
         },
         include: {
@@ -286,4 +290,34 @@ export class CategoryService {
     }
   }
 
+  public async restore(id: string): Promise<Category> {
+    try {
+      this.logger.info(`♻️ Restoring category: ${id}`, 'CategoryService');
+
+      const category = await this.findOne(id)
+
+      if (category.isActive) {
+        throw new BadRequestException('Category is already active');
+      }
+
+      const restoredCategory = await this.prisma.master.category.update({
+        where: { id },
+        data: {
+          isActive: true,
+          isDeleted: false,
+          deletedAt: null,
+        },
+      });
+
+      this.logger.info(`✅ Category restored: ${id}`, 'CategoryService');
+
+      return restoredCategory;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (error instanceof BadRequestException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(`⛔ Error in restore: ${message}`, 'CategoryService');
+      throw new InternalServerErrorException('Internal Server Error.');
+    }
+  }
 }
