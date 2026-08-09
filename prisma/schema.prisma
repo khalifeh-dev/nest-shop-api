@@ -81,48 +81,76 @@ enum AuthProvider {
   LOCAL
 }
 
+enum TicketStatus {
+  OPEN       
+  IN_PROGRESS
+  PENDING   
+  RESOLVED   
+  CLOSED     
+  REOPENED  
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TicketCategory {
+  GENERAL   
+  TECHNICAL  
+  BILLING    
+  SUPPORT  
+  FEATURE     
+  BUG       
+  COMPLAINT   
+  OTHER     
+}
+
 //! <----------------------------------------<< Moldes >>---------------------------------------->
 
 //? <----------------------- User ----------------------->
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  firstName String
-  lastName  String
-  userName  String?  @unique
-  password  String?
+  id                  String   @id @default(cuid())
+  email               String   @unique
+  firstName           String
+  lastName            String
+  userName            String?  @unique
+  password            String?
 
-  isVerified Boolean @default(false)
-  provider   AuthProvider @default(LOCAL)
-  googleId   String? @unique @map("google_id")
-  githubId   String? @unique @map("github_id")
-  appleId    String? @unique @map("apple_id")
-  
-  avatar    String?
-  bio       String?
+  isVerified           Boolean @default(false)
+  provider             AuthProvider @default(LOCAL)
+  googleId             String? @unique @map("google_id")
+  githubId             String? @unique @map("github_id")
+  appleId              String? @unique @map("apple_id")
 
-  userStatus UserStatus @default(ACTIVE) @map("user_status")
+  avatar               String?
+  bio                  String?
 
-  deletedAt    DateTime? @map("deleted_at")
-  deletedBy    String?   @map("deleted_by")
-  deleteReason String?   @map("delete_reason")
-  isDeleted    Boolean   @default(false) @map("is_deleted")
+  userStatus           UserStatus @default(ACTIVE) @map("user_status")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  deletedAt            DateTime? @map("deleted_at")
+  deletedBy            String?   @map("deleted_by")
+  deleteReason         String?   @map("delete_reason")
+  isDeleted            Boolean   @default(false) @map("is_deleted")
 
-  sellerInfo  Json?
-  sellerVerified Boolean @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  lastLoginAt   DateTime?
+  sellerInfo           Json?
+  sellerVerified       Boolean @default(false)
 
-  refreshTokens    RefreshToken[]
-  roles    UserRole[]
-  images           UserImage[]
-  verifyCodes      verifyCode[]
-  notifications    Notification[]
+  lastLoginAt          DateTime?
+
+  refreshTokens        RefreshToken[]
+  roles                UserRole[]
+  images               UserImage[]
+  verifyCodes          verifyCode[]
+  notifications        Notification[]
   userNotifications    UserNotification[]
-  products    Product[]
+  products             Product[]
+  tickets              Ticket[]
 }
 
 
@@ -264,8 +292,8 @@ model UserNotification {
 
   isRead        Boolean    @default(false)
   readAt        DateTime?
-  isDismissed  Boolean  @default(false) @map("is_dismissed")
-  dismissedAt  DateTime? @map("dismissed_at")
+  isDismissed   Boolean  @default(false) @map("is_dismissed")
+  dismissedAt   DateTime? @map("dismissed_at")
   deliveredAt   DateTime @default(now())
 
   @@index([userId, notificationId])
@@ -443,4 +471,49 @@ model Category {
   products    ProductCategory[]
 
   @@map("categories")
+}
+
+
+//? <----------------------- Ticket ----------------------->
+model Ticket {
+  id          String   @id @default(cuid())
+  title       String  
+  description String 
+  category    TicketCategory @default(GENERAL)
+  priority    TicketPriority @default(MEDIUM)
+  status      TicketStatus   @default(OPEN)
+
+  deletedAt   DateTime? @map("deleted_at")
+  isDeleted   Boolean   @default(false) @map("is_deleted")
+
+  attachments Json?    
+
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // assignedToId String? @map("assigned_to_id")
+  // assignedTo   User?   @relation("AssignedTickets", fields: [assignedToId], references: [id])
+  
+  replyToId   String?  @map("reply_to_id")
+  replyTo     Ticket?  @relation("ticketReplies", fields: [replyToId], references: [id])
+  replies     Ticket[] @relation("ticketReplies")
+
+  replyCount  Int      @default(0) @map("reply_count")
+  rating      Int? 
+  tags        String[] @default([]) 
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  resolvedAt  DateTime? @map("resolved_at")
+  closedAt    DateTime? @map("closed_at")
+  lastRepliedAt DateTime? @map("last_replied_at")
+
+  @@index([userId])
+  // @@index([assignedToId])
+  @@index([status])
+  @@index([priority])
+  @@index([category])
+  @@index([createdAt])
+  @@index([replyToId])
+  @@map("tickets")
 }

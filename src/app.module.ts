@@ -24,6 +24,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { NotificationModule } from './common/services/notification/notification.module';
 import { ProductModule } from './modules/product/product.module';
 import { CategoryModule } from './modules/category/category.module';
+import { TicketModule } from './modules/ticket/ticket.module';
 
 @Module({
   imports: [
@@ -107,6 +108,7 @@ import { CategoryModule } from './modules/category/category.module';
     NotificationModule,
     ProductModule,
     CategoryModule,
+    TicketModule,
   ],
   controllers: [AppController],
   providers: [
