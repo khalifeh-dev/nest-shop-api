@@ -1,3 +1,4 @@
+// src/modules/ticket/dto/get-tickets.dto.ts
 import {
   IsOptional,
   IsInt,
@@ -8,23 +9,24 @@ import {
   IsUUID,
   IsDateString,
   IsBoolean,
+  IsIn,
+  IsArray,
+  IsObject,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { TicketStatus, TicketPriority, TicketCategory } from '@prisma/client';
 
 export class GetTicketsDto {
-  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)
-  limit?: number = 20;
+  limit;
 
-  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page?: number = 1;
+  page;
 
   @IsOptional()
   @IsEnum(TicketStatus)
@@ -43,8 +45,52 @@ export class GetTicketsDto {
   userId?: string;
 
   @IsOptional()
-  @IsString()
-  search?: string;
+  @IsUUID()
+  parentId?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  hasReplies?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  isDeleted?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  minReplyCount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  maxReplyCount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  minRating?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  maxRating?: number;
 
   @IsOptional()
   @IsDateString()
@@ -55,15 +101,85 @@ export class GetTicketsDto {
   toDate?: string;
 
   @IsOptional()
-  @IsBoolean()
-  isDeleted?: boolean;
+  @IsDateString()
+  resolvedFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  resolvedTo?: string;
 
   @IsOptional()
   @IsString()
-  sortBy?: 'createdAt' | 'updatedAt' | 'priority' | 'status' | 'replyCount' =
-    'createdAt';
+  search?: string;
 
   @IsOptional()
-  @IsString()
+  @IsIn([
+    'createdAt',
+    'updatedAt',
+    'priority',
+    'status',
+    'replyCount',
+    'rating',
+    'resolvedAt',
+    'closedAt',
+  ])
+  sortBy?: string = 'createdAt';
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  includeUser?: boolean = true;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  includeReplies?: boolean = false;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  includeParent?: boolean = false;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  includeStats?: boolean = false;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  matchAllTags?: boolean = false;
+
+  @IsOptional()
+  @IsIn(['status', 'priority', 'category'])
+  groupBy?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
 }

@@ -8,7 +8,7 @@ import { UserModule } from './modules/user/user.module';
 import { CloudinaryModule } from './common/services/cloudinary/cloudinary.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RefreshTokenModule } from './common/services/refresh-token/refresh-token.module';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+// import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { Redis } from 'ioredis';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { APP_GUARD } from '@nestjs/core';
@@ -34,26 +34,26 @@ import { TicketModule } from './modules/ticket/ticket.module';
       envFilePath: '.env',
     }),
 
-    ThrottlerModule.forRoot({
-      storage: new ThrottlerStorageRedisService(
-        new Redis({
-          host: 'localhost',
-          port: 6379,
-        }),
-      ),
-      throttlers: [
-        {
-          name: 'default',
-          ttl: 60_000,
-          limit: 60,
-        },
-        {
-          name: 'auth',
-          ttl: 60_000,
-          limit: 10,
-        },
-      ],
-    }),
+    // ThrottlerModule.forRoot({
+    //   storage: new ThrottlerStorageRedisService(
+    //     new Redis({
+    //       host: 'localhost',
+    //       port: 6379,
+    //     }),
+    //   ),
+    //   throttlers: [
+    //     {
+    //       name: 'default',
+    //       ttl: 60_000,
+    //       limit: 60,
+    //     },
+    //     {
+    //       name: 'auth',
+    //       ttl: 60_000,
+    //       limit: 10,
+    //     },
+    //   ],
+    // }),
 
     ScheduleModule.forRoot(),
 
@@ -113,10 +113,10 @@ import { TicketModule } from './modules/ticket/ticket.module';
   controllers: [AppController],
   providers: [
     AppService,
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
-    },
+    // {
+    //   provide: APP_GUARD,
+    //   useClass: ThrottlerGuard,
+    // },
     {
       provide: LoggerService,
       useClass: PinoLoggerService,
