@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { DatabaseService } from '../../common/database/database.service';
 import { UserService } from '../user/user.service';
-import { CreateTicketDto, GetTicketsDto } from './dto';
+import { CreateTicketDto, GetTicketsDto, UpdateTicketDto } from './dto';
 import type { LoggerService } from '../../common/services/logger/logger-options.interface';
 import { ErrorUtil } from '../../common/utils/error.util';
 import {
@@ -19,6 +19,7 @@ import {
 } from '@prisma/client';
 import { FindAll } from '../../common/types/find-all.type';
 import { Pagination } from '../../common/utils/pagination';
+import { isNil, pick } from 'lodash';
 
 @Injectable()
 export class TicketService {
@@ -184,10 +185,19 @@ export class TicketService {
         where: { id },
       });
 
-      if (!ticket)
+      if (!ticket) {
+        this.logger.warn(`Ticekt not found with ID: ${id}`, 'TicketService');
         throw new NotFoundException(`Ticket not found with ID: ${id}`);
-      if (ticket.isDeleted)
+      }
+      if (ticket.isDeleted) {
+        this.logger.warn(
+          `Ticekt has already been deleted with ID: ${id}`,
+          'TicketService',
+        );
         throw new BadRequestException(`Ticket has already been deleted.`);
+      }
+
+      this.logger.info(`Ticket found with ID: ${id}`, 'TicketService');
 
       return ticket;
     } catch (error) {
@@ -198,11 +208,159 @@ export class TicketService {
         throw error;
       let message = ErrorUtil.getMessage(error);
       this.logger.error(
-        `❌ Unexpected error in find all ticket: ${message}`,
+        `❌ Unexpected error in find one ticket: ${message}`,
         'TicketService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
+  }
+
+  public async update(id: string, dto: UpdateTicketDto): Promise<Ticket> {
+    try {
+      this.logger.info(`🧩 Update ticket wth ID: ${id}`, 'TicketService');
+      const existingTicket = await this.findOne(id);
+
+      if (
+        existingTicket.status === TicketStatus.CLOSED &&
+        dto.status !== TicketStatus.REOPENED
+      )
+        throw new BadRequestException(
+          'Cannot update a closed ticket. Only status change to REOPENED is allowed.',
+        );
+
+      if (existingTicket.status === TicketStatus.RESOLVED) {
+        const allowedFields = ['rating', 'tags'];
+        const requestedFields = Object.keys(dto);
+        const hasInvalidField = requestedFields.some(
+          (field) => !allowedFields.includes(field) && field !== 'status',
+        );
+        if (hasInvalidField && dto.status !== TicketStatus.REOPENED)
+          throw new BadRequestException(
+            'Resolved tickets can only be updated with rating, tags, or status (REOPENED).',
+          );
+      }
+
+      const updateData = {
+        ...pick(dto, [
+          'title',
+          'description',
+          'category',
+          'priority',
+          'tags',
+          'rating',
+        ]),
+        ...this.getStatusTransition(existingTicket.status, dto?.status),
+      };
+
+      Object.keys(updateData).forEach((key) => {
+        if (isNil(updateData[key])) {
+          delete updateData[key];
+        }
+      });
+
+      if (
+        updateData.rating !== undefined &&
+        (updateData.rating < 1 || updateData.rating > 5)
+      )
+        throw new BadRequestException('Rating must be between 1 and 5.');
+
+      const updatedTicket = await this.prisma.master.$transaction(
+        async (tx) => {
+          return tx.ticket.update({
+            where: { id },
+            data: updateData,
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  firstName: true,
+                  lastName: true,
+                  avatar: true,
+                },
+              },
+              replyTo: {
+                select: {
+                  id: true,
+                  title: true,
+                  description: true,
+                  status: true,
+                },
+              },
+            },
+          });
+        },
+      );
+
+      this.logger.info(
+        `✅ Ticket updated successfully: ${updatedTicket.id}`,
+        'TicketService',
+      );
+      return updatedTicket;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in update ticket: ${message}`,
+        'TicketService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  private getStatusTransition(
+    currentStatus: TicketStatus,
+    newStatus?: TicketStatus,
+  ): any {
+    if (!newStatus || newStatus === currentStatus) return {};
+
+    const statusMap: Record<string, any> = {
+      [`${TicketStatus.OPEN}_${TicketStatus.IN_PROGRESS}`]: {
+        status: TicketStatus.IN_PROGRESS,
+      },
+      [`${TicketStatus.OPEN}_${TicketStatus.RESOLVED}`]: {
+        status: TicketStatus.RESOLVED,
+        resolvedAt: new Date(),
+      },
+      [`${TicketStatus.IN_PROGRESS}_${TicketStatus.RESOLVED}`]: {
+        status: TicketStatus.RESOLVED,
+        resolvedAt: new Date(),
+      },
+      [`${TicketStatus.RESOLVED}_${TicketStatus.CLOSED}`]: {
+        status: TicketStatus.CLOSED,
+        closedAt: new Date(),
+      },
+      [`${TicketStatus.RESOLVED}_${TicketStatus.REOPENED}`]: {
+        status: TicketStatus.OPEN,
+        resolvedAt: null,
+        closedAt: null,
+      },
+      [`${TicketStatus.CLOSED}_${TicketStatus.REOPENED}`]: {
+        status: TicketStatus.OPEN,
+        resolvedAt: null,
+        closedAt: null,
+      },
+    };
+
+    const key = `${currentStatus}_${newStatus}`;
+    const transition = statusMap[key];
+
+    if (!transition)
+      throw new BadRequestException(
+        `Invalid status transition: ${currentStatus} -> ${newStatus}`,
+      );
+
+    if (
+      newStatus === TicketStatus.CLOSED &&
+      currentStatus !== TicketStatus.RESOLVED
+    )
+      throw new BadRequestException('Ticket must be resolved before closing.');
+
+    return transition;
   }
 
   private buildWhereClause(dto: GetTicketsDto): Prisma.TicketWhereInput {

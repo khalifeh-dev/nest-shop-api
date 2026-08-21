@@ -5,11 +5,12 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
 import { TicketService } from './ticket.service';
-import { CreateTicketDto } from './dto';
+import { CreateTicketDto, UpdateTicketDto } from './dto';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -148,6 +149,15 @@ export class TicketController {
   @HttpCode(HttpStatus.OK)
   public async findOne(@Param('id') id: string) {
     const ticket: Ticket = await this.ticketService.findOne(id);
+
+    return ticket;
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update a ticket' })
+  @HttpCode(HttpStatus.OK)
+  public async update(@Param('id') id: string, @Body() dto: UpdateTicketDto) {
+    const ticket: Ticket = await this.ticketService.update(id, dto);
 
     return ticket;
   }
