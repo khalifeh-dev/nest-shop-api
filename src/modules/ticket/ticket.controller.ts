@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -170,6 +171,24 @@ export class TicketController {
     @Body('status') status: TicketStatus,
   ) {
     const ticket: Ticket = await this.updateTicketStatus(id, status);
+
+    return ticket;
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Soft delete a ticket' })
+  @HttpCode(HttpStatus.OK)
+  public async softDelete(@Param('id') id: string) {
+    const ticket: Ticket = await this.ticketService.softDelete(id);
+
+    return ticket;
+  }
+
+  @Patch(':id/restore')
+  @ApiOperation({ summary: 'restore a ticket' })
+  @HttpCode(HttpStatus.OK)
+  public async restore(@Param('id') id: string) {
+    const ticket: Ticket = await this.ticketService.restore(id);
 
     return ticket;
   }

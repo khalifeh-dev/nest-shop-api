@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -312,16 +313,22 @@ export class TicketService {
     }
   }
 
-  public async updateTicketStatus (id: string, newStatus: TicketStatus): Promise<Ticket> {
-
+  public async updateTicketStatus(
+    id: string,
+    newStatus: TicketStatus,
+  ): Promise<Ticket> {
     try {
-      this.logger.info(`🧩 Update ticket status with ID: ${ id }, change to ${ newStatus }`, "TicketService")
-      const updatedTicket = await this.update(id, { status: newStatus })
-      this.logger.info(`✅ Updated ticket status with ID: ${ id }`, "TicketService")
-      return updatedTicket
-
+      this.logger.info(
+        `🧩 Update ticket status with ID: ${id}, change to ${newStatus}`,
+        'TicketService',
+      );
+      const updatedTicket = await this.update(id, { status: newStatus });
+      this.logger.info(
+        `✅ Updated ticket status with ID: ${id}`,
+        'TicketService',
+      );
+      return updatedTicket;
     } catch (error) {
-
       if (
         error instanceof NotFoundException ||
         error instanceof BadRequestException
@@ -333,9 +340,131 @@ export class TicketService {
         'TicketService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
-
     }
+  }
 
+  public async softDelete(id: string): Promise<Ticket> {
+    try {
+      this.logger.info(`⛔ Remove ticket with ID: ${id}`, 'TicketService');
+      const existingTicket = await this.findOne(id);
+
+      if (existingTicket.status === TicketStatus.IN_PROGRESS)
+        throw new ConflictException(
+          'Cannot delete a ticket that is currently in progress.',
+        );
+
+      const deletedTicket = await this.prisma.master.$transaction(
+        async (tx) => {
+          const ticket = await tx.ticket.update({
+            where: { id },
+            data: {
+              isDeleted: true,
+              deletedAt: new Date(),
+              ...(existingTicket.status !== TicketStatus.CLOSED && {
+                status: TicketStatus.CLOSED,
+                closedAt: new Date(),
+              }),
+            },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  firstName: true,
+                  lastName: true,
+                  avatar: true,
+                },
+              },
+              replyTo: {
+                select: {
+                  id: true,
+                  title: true,
+                  description: true,
+                  status: true,
+                },
+              },
+            },
+          });
+
+          return ticket;
+        },
+      );
+
+      this.logger.info(
+        `✅ Removed ticket with ID: ${id} successfuly`,
+        'TicketService',
+      );
+
+      return deletedTicket;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException ||
+        error instanceof ConflictException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in soft delete ticket: ${message}`,
+        'TicketService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async restore(id: string): Promise<Ticket> {
+    try {
+      this.logger.info(`♻️ Restoring ticket with ID: ${id}`, 'TicketService');
+
+      const deletedTicket = await this.prisma.replica.ticket.findUnique({
+        where: { id, isDeleted: true },
+      });
+
+      if (!deletedTicket)
+        throw new NotFoundException(`Deleted ticket with ID ${id} not found.`);
+
+      const restoredTicket = await this.prisma.master.ticket.update({
+        where: { id },
+        data: {
+          isDeleted: false,
+          deletedAt: null,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              avatar: true,
+            },
+          },
+          replyTo: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              status: true,
+            },
+          },
+        },
+      });
+
+      this.logger.info(
+        `✅ Ticket restored successfully: ${restoredTicket.id}`,
+        'TicketService',
+      );
+
+      return restoredTicket;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in restore ticket: ${message}`,
+        'TicketService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
   }
 
   private getStatusTransition(
