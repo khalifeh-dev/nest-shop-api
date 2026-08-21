@@ -3,6 +3,7 @@ import { RefreshTokenService } from '../../services/refresh-token/refresh-token.
 import { VerifyCodeService } from '../../services/verify-code/verify-code.service';
 import { NotificationService } from '../../services/notification/notification.service';
 import { ProductService } from '../../../modules/product/product.service';
+import { TicketService } from '../../../modules/ticket/ticket.service';
 
 @Injectable()
 export class CleanUpJob {
@@ -10,7 +11,8 @@ export class CleanUpJob {
     private refreshTokenService: RefreshTokenService,
     private verifyCodeService: VerifyCodeService,
     private notificationService: NotificationService,
-    private productService: ProductService
+    private productService: ProductService,
+    private ticketService: TicketService,
   ) {}
 
   public async cleanUpRefreshTokens() {
@@ -30,6 +32,11 @@ export class CleanUpJob {
 
   public async cleanupProducts () {
     await this.productService.cleanupDeletedProducts()
+    return true
+  }
+
+  public async cleanupTickets () {
+    await this.ticketService.cleanupDeletedTickets()
     return true
   }
 }

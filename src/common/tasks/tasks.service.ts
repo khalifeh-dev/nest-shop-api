@@ -25,4 +25,9 @@ export class TasksService {
   public async cleanupProducts() {
     return await this.cleanupProducts();
   }
+
+  @Cron(CronExpression.EVERY_WEEK)
+  public async cleanupTickets () {
+    return await this.cleanUpJob.cleanupTickets()
+  }
 }

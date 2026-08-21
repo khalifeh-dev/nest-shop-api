@@ -469,9 +469,12 @@ export class TicketService {
 
   public async permanentDelete(id: string): Promise<{ success: boolean }> {
     try {
-      this.logger.info(`🔥 Permanently deleting ticket with ID: ${id}`, 'TicketService');
+      this.logger.info(
+        `🔥 Permanently deleting ticket with ID: ${id}`,
+        'TicketService',
+      );
 
-      await this.findOne(id)
+      await this.findOne(id);
 
       await this.prisma.transaction(async (tx) => {
         await tx.ticket.deleteMany({
@@ -483,14 +486,84 @@ export class TicketService {
         });
       });
 
-      this.logger.info(
-        `🔥 Ticket permanently deleted: ${id}`,
-        'TicketService',
-      );
+      this.logger.info(`🔥 Ticket permanently deleted: ${id}`, 'TicketService');
 
       return { success: true };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in permanent delete: ${message}`,
+        'TicketService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async cleanupDeletedTickets(
+    olderThanDays: number = 30,
+  ): Promise<{ deletedCount: number; replyCount: number }> {
+    try {
+      this.logger.info(
+        `🧹 Starting cleanup of tickets deleted more than ${olderThanDays} days ago...`,
+        'TicketService',
+      );
+
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
+
+      const deletedTickets = await this.prisma.replica.ticket.findMany({
+        where: {
+          isDeleted: true,
+          deletedAt: { lt: cutoffDate },
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (deletedTickets.length === 0) {
+        this.logger.info(
+          '✅ No old deleted tickets found to clean up.',
+          'TicketService',
+        );
+        return { deletedCount: 0, replyCount: 0 };
+      }
+
+      const ticketIds = deletedTickets.map((t) => t.id);
+      this.logger.info(
+        `🔍 Found ${ticketIds.length} old deleted tickets.`,
+        'TicketService',
+      );
+
+      const result = await this.prisma.transaction(async (tx) => {
+        const deletedReplies = await tx.ticket.deleteMany({
+          where: {
+            replyToId: { in: ticketIds },
+          },
+        });
+        const deletedTicketsResult = await tx.ticket.deleteMany({
+          where: {
+            id: { in: ticketIds },
+          },
+        });
+
+        return {
+          deletedTickets: deletedTicketsResult.count,
+          deletedReplies: deletedReplies.count,
+        };
+      });
+
+      this.logger.info(
+        `✅ Cleanup completed: ${result.deletedTickets} tickets and ${result.deletedReplies} replies permanently removed.`,
+        'TicketService',
+      );
+
+      return {
+        deletedCount: result.deletedTickets,
+        replyCount: result.deletedReplies,
+      };
+    } catch (error) {
       const message = ErrorUtil.getMessage(error);
       this.logger.error(
         `❌ Unexpected error in permanent delete: ${message}`,

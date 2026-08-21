@@ -7,5 +7,6 @@ import { UserModule } from '../user/user.module';
   imports: [UserModule],
   controllers: [TicketController],
   providers: [TicketService],
+  exports: [TicketService]
 })
 export class TicketModule {}

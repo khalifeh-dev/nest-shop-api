@@ -5,9 +5,10 @@ import { CleanUpJob } from './jobs/clean-up.job';
 import { VerifyCodeModule } from '../services/verify-code/verify-code.module';
 import { NotificationModule } from '../services/notification/notification.module';
 import { ProductModule } from '../../modules/product/product.module';
+import { TicketModule } from '../../modules/ticket/ticket.module';
 
 @Module({
-  imports: [RefreshTokenModule, VerifyCodeModule, NotificationModule, ProductModule],
+  imports: [RefreshTokenModule, VerifyCodeModule, NotificationModule, ProductModule, TicketModule],
   providers: [TasksService, CleanUpJob], 
 })
 export class TasksModule {}
