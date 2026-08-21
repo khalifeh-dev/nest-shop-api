@@ -1,4 +1,3 @@
-// src/modules/ticket/dto/get-tickets.dto.ts
 import {
   IsOptional,
   IsInt,
@@ -11,10 +10,10 @@ import {
   IsBoolean,
   IsIn,
   IsArray,
-  IsObject,
 } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import { TicketStatus, TicketPriority, TicketCategory } from '@prisma/client';
+import { ToBoolean } from '../../../common/decorators/to-boolean.decorator';
 
 export class GetTicketsDto {
   @Type(() => Number)
@@ -49,20 +48,12 @@ export class GetTicketsDto {
   parentId?: string;
 
   @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    return value;
-  })
+  @ToBoolean()
   @IsBoolean()
   hasReplies?: boolean;
 
   @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    return value;
-  })
+  @ToBoolean()
   @IsBoolean()
   isDeleted?: boolean;
 
@@ -130,47 +121,27 @@ export class GetTicketsDto {
   sortOrder?: 'asc' | 'desc' = 'desc';
 
   @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    return value;
-  })
+  @ToBoolean()
   @IsBoolean()
   includeUser?: boolean = true;
 
   @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    return value;
-  })
+  @ToBoolean()
   @IsBoolean()
   includeReplies?: boolean = false;
 
   @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    return value;
-  })
+  @ToBoolean()
   @IsBoolean()
   includeParent?: boolean = false;
 
   @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    return value;
-  })
+  @ToBoolean()
   @IsBoolean()
   includeStats?: boolean = false;
 
   @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    return value;
-  })
+  @ToBoolean()
   @IsBoolean()
   matchAllTags?: boolean = false;
 
