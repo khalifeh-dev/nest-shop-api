@@ -312,6 +312,32 @@ export class TicketService {
     }
   }
 
+  public async updateTicketStatus (id: string, newStatus: TicketStatus): Promise<Ticket> {
+
+    try {
+      this.logger.info(`🧩 Update ticket status with ID: ${ id }, change to ${ newStatus }`, "TicketService")
+      const updatedTicket = await this.update(id, { status: newStatus })
+      this.logger.info(`✅ Updated ticket status with ID: ${ id }`, "TicketService")
+      return updatedTicket
+
+    } catch (error) {
+
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in update ticket status: ${message}`,
+        'TicketService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+
+    }
+
+  }
+
   private getStatusTransition(
     currentStatus: TicketStatus,
     newStatus?: TicketStatus,

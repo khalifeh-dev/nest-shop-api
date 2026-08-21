@@ -161,4 +161,16 @@ export class TicketController {
 
     return ticket;
   }
+
+  @Patch(':id/status')
+  @ApiOperation({ summary: 'Update a ticket status' })
+  @HttpCode(HttpStatus.OK)
+  public async updateTicketStatus(
+    @Param('id') id: string,
+    @Body('status') status: TicketStatus,
+  ) {
+    const ticket: Ticket = await this.updateTicketStatus(id, status);
+
+    return ticket;
+  }
 }
