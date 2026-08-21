@@ -467,6 +467,39 @@ export class TicketService {
     }
   }
 
+  public async permanentDelete(id: string): Promise<{ success: boolean }> {
+    try {
+      this.logger.info(`🔥 Permanently deleting ticket with ID: ${id}`, 'TicketService');
+
+      await this.findOne(id)
+
+      await this.prisma.transaction(async (tx) => {
+        await tx.ticket.deleteMany({
+          where: { replyToId: id },
+        });
+
+        await tx.ticket.delete({
+          where: { id },
+        });
+      });
+
+      this.logger.info(
+        `🔥 Ticket permanently deleted: ${id}`,
+        'TicketService',
+      );
+
+      return { success: true };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in permanent delete: ${message}`,
+        'TicketService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
   private getStatusTransition(
     currentStatus: TicketStatus,
     newStatus?: TicketStatus,

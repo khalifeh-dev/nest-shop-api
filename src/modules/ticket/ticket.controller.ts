@@ -175,7 +175,7 @@ export class TicketController {
     return ticket;
   }
 
-  @Delete(':id')
+  @Delete(':id/soft')
   @ApiOperation({ summary: 'Soft delete a ticket' })
   @HttpCode(HttpStatus.OK)
   public async softDelete(@Param('id') id: string) {
@@ -189,6 +189,15 @@ export class TicketController {
   @HttpCode(HttpStatus.OK)
   public async restore(@Param('id') id: string) {
     const ticket: Ticket = await this.ticketService.restore(id);
+
+    return ticket;
+  }
+
+  @Delete(':id/hard')
+  @ApiOperation({ summary: 'Hard delete a ticket' })
+  @HttpCode(HttpStatus.OK)
+  public async permanentDelete(@Param('id') id: string) {
+    const ticket = await this.ticketService.permanentDelete(id);
 
     return ticket;
   }
