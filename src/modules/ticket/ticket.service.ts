@@ -176,6 +176,35 @@ export class TicketService {
     }
   }
 
+  public async findOne(id: string): Promise<Ticket> {
+    try {
+      this.logger.info(`🔍 Find ticket with ID: ${id}`, 'TicketService');
+
+      const ticket = await this.prisma.replica.ticket.findUnique({
+        where: { id },
+      });
+
+      if (!ticket)
+        throw new NotFoundException(`Ticket not found with ID: ${id}`);
+      if (ticket.isDeleted)
+        throw new BadRequestException(`Ticket has already been deleted.`);
+
+      return ticket;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in find all ticket: ${message}`,
+        'TicketService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
   private buildWhereClause(dto: GetTicketsDto): Prisma.TicketWhereInput {
     const where: Prisma.TicketWhereInput = {};
 
@@ -187,41 +216,45 @@ export class TicketService {
     return where;
   }
 
-private applySimpleFilters(
-  where: Prisma.TicketWhereInput,
-  dto: GetTicketsDto,
-): void {
-  const simpleFilters = [
-    'userId',
-    'parentId',
-    'status',
-    'priority',
-    'category',
-  ] as const;
+  private applySimpleFilters(
+    where: Prisma.TicketWhereInput,
+    dto: GetTicketsDto,
+  ): void {
+    const simpleFilters = [
+      'userId',
+      'parentId',
+      'status',
+      'priority',
+      'category',
+    ] as const;
 
-  for (const key of simpleFilters) {
-    const value = dto[key];
-    if (value !== undefined && value !== null) {
-      where[key] = value;
+    for (const key of simpleFilters) {
+      const value = dto[key];
+      if (value !== undefined && value !== null) {
+        where[key] = value;
+      }
+    }
+
+    if (dto.isDeleted !== undefined && dto.isDeleted !== null) {
+      where.isDeleted = dto.isDeleted === true;
+    }
+
+    if (dto.hasReplies !== undefined && dto.hasReplies !== null) {
+      const hasReplies = dto.hasReplies === true;
+      where.replyCount = hasReplies ? { gt: 0 } : 0;
     }
   }
-
-  if (dto.isDeleted !== undefined && dto.isDeleted !== null) {
-    where.isDeleted = dto.isDeleted === true;
-  }
-
-  if (dto.hasReplies !== undefined && dto.hasReplies !== null) {
-    const hasReplies = dto.hasReplies === true;
-    where.replyCount = hasReplies ? { gt: 0 } : 0;
-  }
-}
 
   private applyNumericFilters(
     where: Prisma.TicketWhereInput,
     dto: GetTicketsDto,
   ): void {
     const numericFilters = [
-      { key: 'replyCount', min: Number(dto.minReplyCount), max: Number(dto.maxReplyCount) },
+      {
+        key: 'replyCount',
+        min: Number(dto.minReplyCount),
+        max: Number(dto.maxReplyCount),
+      },
       { key: 'rating', min: Number(dto.minRating), max: Number(dto.maxRating) },
     ];
 

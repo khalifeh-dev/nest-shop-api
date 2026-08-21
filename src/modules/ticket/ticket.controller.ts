@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Query,
 } from '@nestjs/common';
@@ -140,5 +141,14 @@ export class TicketController {
         prevPage: pg > 1 ? pg - 1 : null,
       },
     };
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Find a ticket' })
+  @HttpCode(HttpStatus.OK)
+  public async findOne(@Param('id') id: string) {
+    const ticket: Ticket = await this.ticketService.findOne(id);
+
+    return ticket;
   }
 }
