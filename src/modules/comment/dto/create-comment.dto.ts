@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsNotEmpty,
   Length,
+  Max,
 } from 'class-validator';
 
 export class CreateCommentDto {
@@ -26,7 +27,8 @@ export class CreateCommentDto {
   })
   @IsNotEmpty()
   @IsInt()
-  @Length(0, 5)
+  @Min(0)
+  @Max(5)
   @Transform(({ value }) => Number(value))
   rating;
 
@@ -36,9 +38,17 @@ export class CreateCommentDto {
   })
   @IsNotEmpty()
   @IsString()
-  @Min(0)
   @Transform(({ value }) => value?.trim())
   productId;
+
+  @ApiProperty({
+    example: '',
+    description: 'User ID',
+  })
+  @IsNotEmpty()
+  @IsString()
+  @Transform(({ value }) => value?.trim())
+  userId;
 
   @ApiProperty({
     example: '',
@@ -46,7 +56,6 @@ export class CreateCommentDto {
   })
   @IsOptional()
   @IsString()
-  @Min(0)
   @Transform(({ value }) => value?.trim())
   parentId?: string;
 }

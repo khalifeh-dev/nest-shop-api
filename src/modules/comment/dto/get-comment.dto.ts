@@ -13,7 +13,7 @@ import {
   IsBoolean,
 } from 'class-validator';
 
-export class CreateCommentDto {
+export class GetCommentDto {
   @ApiProperty({
     example: 20,
     description: 'Pagination Limit',
