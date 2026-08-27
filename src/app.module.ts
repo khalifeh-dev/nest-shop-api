@@ -25,6 +25,7 @@ import { NotificationModule } from './common/services/notification/notification.
 import { ProductModule } from './modules/product/product.module';
 import { CategoryModule } from './modules/category/category.module';
 import { TicketModule } from './modules/ticket/ticket.module';
+import { CommentModule } from './modules/comment/comment.module';
 
 @Module({
   imports: [
@@ -109,6 +110,7 @@ import { TicketModule } from './modules/ticket/ticket.module';
     ProductModule,
     CategoryModule,
     TicketModule,
+    CommentModule,
   ],
   controllers: [AppController],
   providers: [

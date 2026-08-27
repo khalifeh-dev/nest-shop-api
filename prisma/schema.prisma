@@ -108,6 +108,15 @@ enum TicketCategory {
   OTHER     
 }
 
+enum CommentStatus {
+  PENDING
+  APPROVED 
+  REJECTED 
+  FLAGGED 
+  DELETED 
+  HIDDEN 
+}
+
 //! <----------------------------------------<< Moldes >>---------------------------------------->
 
 //? <----------------------- User ----------------------->
@@ -151,6 +160,7 @@ model User {
   userNotifications    UserNotification[]
   products             Product[]
   tickets              Ticket[]
+  comments    Comment[]
 }
 
 
@@ -408,6 +418,7 @@ model Product {
 
   categories  ProductCategory[]
   images      ProductImage[]
+  comments    Comment[]
   // bookmarks    Bookmark[]
   // comments     Comment[]
   // orderItems   OrderItem[]
@@ -516,4 +527,49 @@ model Ticket {
   @@index([createdAt])
   @@index([replyToId])
   @@map("tickets")
+}
+
+
+//? <----------------------- Comment ----------------------->
+model Comment {
+  id         String    @id @default(cuid())
+  content    String    @db.Text
+  rating     Int       @default(0)
+  
+  status     CommentStatus @default(PENDING)
+  isDeleted  Boolean   @default(false) @map("is_deleted")
+  deletedAt  DateTime? @map("deleted_at")
+
+  userId     String    @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  productId  String    @map("product_id")
+  product    Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  parentId   String?   @map("parent_id")
+  parent     Comment?  @relation("commentReplies", fields: [parentId], references: [id])
+  replies    Comment[] @relation("commentReplies")
+
+  likesCount    Int       @default(0) @map("likes_count")
+  dislikesCount Int       @default(0) @map("dislikes_count")
+  replyCount    Int       @default(0) @map("reply_count")
+  
+  isReported  Boolean  @default(false) @map("is_reported")
+  reportedAt  DateTime? @map("reported_at")
+  reportReason String? @map("report_reason") @db.Text
+
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  approvedAt DateTime? @map("approved_at")
+  editedAt   DateTime? @map("edited_at")
+
+  @@index([userId])
+  @@index([productId])
+  @@index([parentId])
+  @@index([status])
+  @@index([isDeleted])
+  @@index([createdAt])
+  @@index([rating])
+  @@index([productId, status])
+  @@map("comments")
 }
