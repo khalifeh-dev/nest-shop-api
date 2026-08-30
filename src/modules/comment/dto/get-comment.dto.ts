@@ -36,6 +36,16 @@ export class GetCommentDto {
   page?: number = 1;
 
   @ApiProperty({
+    example: 3,
+    description: 'Offset Reply Comment',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  // @Min(1)
+  offset?: number = 3
+
+  @ApiProperty({
     example: '',
     description: 'Product ID',
   })
