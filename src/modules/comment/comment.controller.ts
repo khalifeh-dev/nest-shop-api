@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import { CommentService } from './comment.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { Comment } from '@prisma/client';
@@ -17,5 +17,16 @@ export class CommentController {
     const comment: Comment = await this.commentService.create(dto);
 
     return comment;
+  }
+
+  @Get(":id")
+  @ApiOperation({ summary: 'Find a comment' })
+  @HttpCode(HttpStatus.OK)
+  public async findOne (@Param("id") id: string) {
+
+    const comment: Comment = await this.commentService.findOne(id)
+
+    return comment
+
   }
 }

@@ -89,4 +89,41 @@ export class CommentService {
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
+
+  public async findOne(id: string): Promise<Comment> {
+    try {
+      this.logger.info(`🔍 Find a comment with ID : ${id}`, 'CommentService');
+
+      const comment = await this.prisma.replica.comment.findUnique({
+        where: { id },
+      });
+      if (!comment) {
+        this.logger.warn(
+          `⛔ Comment not found with ID: ${id}`,
+          'CommentService',
+        );
+        throw new NotFoundException(`Comment not found with ID: ${id}`);
+      }
+
+      if (comment.isDeleted) {
+        this.logger.warn(
+          `⛔ Comment with ID ${id} has already deleted`,
+          'CommentService',
+        );
+        throw new NotFoundException(
+          `Comment with ID ${id} has already deleted`,
+        );
+      }
+
+      return comment;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in find one comment: ${message}`,
+        'CommentService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
 }
