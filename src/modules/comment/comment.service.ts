@@ -575,12 +575,12 @@ export class CommentService {
   }
 
   //! Need fix a bug
-  public async getProductComment(
+  public async getProductComments(
     productId: string,
     limit: number = 20,
     page: number = 1,
     offset: number = 3,
-    status: Omit<CommentStatus, "DELETED" | "HIDDEN">
+    status: Omit<CommentStatus, 'DELETED' | 'HIDDEN'>,
   ) {
     try {
       this.logger.info(
@@ -594,11 +594,52 @@ export class CommentService {
         page,
         offset,
         productId,
-        ...(status === undefined && { status: CommentStatus.APPROVED })
+        ...(status === undefined && { status: CommentStatus.APPROVED }),
       });
 
       this.logger.info(
         `✅ Get product: ${productId} comments successfuly`,
+        'CommentService',
+      );
+
+      return comments;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in get product comment comment: ${message}`,
+        'CommentService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async getUserComments(
+    userId: string,
+    limit: number = 20,
+    page: number = 1,
+    offset: number = 3,
+    status: Omit<CommentStatus, 'DELETED' | 'HIDDEN'>,
+  ) {
+    try {
+      this.logger.info(`🔍 Get user: ${userId} comments`, 'CommentService');
+      await this.userService.findOne(userId);
+
+      const comments = await this.findAll({
+        limit,
+        page,
+        offset,
+        userId,
+        ...(status === undefined && { status: CommentStatus.APPROVED }),
+      });
+
+      this.logger.info(
+        `✅ Get user: ${userId} comments successfuly`,
         'CommentService',
       );
 

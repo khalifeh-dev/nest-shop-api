@@ -157,14 +157,35 @@ export class CommentController {
     @Query('offset') offset: number = 3,
     @Query('status') status: string = CommentStatus.APPROVED,
   ) {
-    const productComments = await this.commentService.getProductComment(
+    const productComments = await this.commentService.getProductComments(
       productId,
       limit,
       page,
       offset,
-      status
+      status,
     );
 
     return productComments;
+  }
+
+  @Get(':userId')
+  @ApiOperation({ summary: 'Find user comments' })
+  @HttpCode(HttpStatus.OK)
+  public async getUserComments(
+    @Param('userId') userId: string,
+    @Query('limit') limit: number = 20,
+    @Query('page') page: number = 1,
+    @Query('offset') offset: number = 3,
+    @Query('status') status: string = CommentStatus.APPROVED,
+  ) {
+    const userComments = await this.commentService.getUserComments(
+      userId,
+      limit,
+      page,
+      offset,
+      status,
+    );
+
+    return userComments;
   }
 }
