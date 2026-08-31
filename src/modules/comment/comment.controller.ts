@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { CommentService } from './comment.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
-import { Comment } from '@prisma/client';
+import { Comment, CommentStatus } from '@prisma/client';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -132,6 +132,15 @@ export class CommentController {
   @HttpCode(HttpStatus.OK)
   public async restore(@Param('id') id: string) {
     const comment = await this.commentService.restore(id);
+    return comment;
+  }
+
+  @Patch(':id/set-status')
+  @ApiOperation({ summary: 'set comment status' })
+  @HttpCode(HttpStatus.OK)
+  public async setStatus(@Param("id") id: string, @Query("status") status: CommentStatus) {
+    const comment = this.commentService.setStatus(id, status);
+    
     return comment;
   }
 }

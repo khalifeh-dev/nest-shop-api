@@ -505,4 +505,110 @@ export class CommentService {
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
+
+  public async setStatus(commentId: string, status: CommentStatus) {
+    try {
+      this.logger.info(
+        `🧩 set ${status} to the comment with ID: ${commentId}`,
+        'CommentService',
+      );
+
+      const existingComment = await this.findOne(commentId);
+      
+      if (existingComment.status === status) {
+        this.logger.warn(
+          `⛔ Comment has already been this status`,
+          'CommentService',
+        );
+        throw new ConflictException(`Comment has already been this status`);
+      }
+
+      this.validateStatusTransition(existingComment.status, status);
+
+      const updatedComment = await this.prisma.master.$transaction(
+        async (tx) => {
+          const comment = await tx.comment.update({
+            where: { id: commentId },
+            data: {
+              status,
+              ...(status === CommentStatus.APPROVED && {
+                approvedAt: new Date(),
+              }),
+            },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  firstName: true,
+                  lastName: true,
+                  avatar: true,
+                },
+              },
+            },
+          });
+
+          return comment;
+        },
+      );
+
+      this.logger.info(
+        `✅ Status updated to "${status}" for comment ${commentId}`,
+        'CommentService',
+      );
+
+      return updatedComment;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in create comment: ${message}`,
+        'CommentService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  private validateStatusTransition(
+    currentStatus: CommentStatus,
+    newStatus: CommentStatus,
+  ): void {
+    const validTransitions: Record<CommentStatus, CommentStatus[]> = {
+      [CommentStatus.PENDING]: [
+        CommentStatus.APPROVED,
+        CommentStatus.REJECTED,
+        CommentStatus.HIDDEN,
+        CommentStatus.FLAGGED,
+      ],
+      [CommentStatus.APPROVED]: [
+        CommentStatus.HIDDEN,
+        CommentStatus.DELETED,
+        CommentStatus.FLAGGED,
+      ],
+      [CommentStatus.REJECTED]: [CommentStatus.PENDING, CommentStatus.DELETED],
+      [CommentStatus.HIDDEN]: [CommentStatus.APPROVED, CommentStatus.DELETED],
+      [CommentStatus.FLAGGED]: [
+        CommentStatus.PENDING,
+        CommentStatus.APPROVED,
+        CommentStatus.REJECTED,
+        CommentStatus.HIDDEN,
+        CommentStatus.DELETED,
+      ],
+      [CommentStatus.DELETED]: [],
+    };
+
+    const allowed = validTransitions[currentStatus] || [];
+
+    if (!allowed.includes(newStatus)) {
+      throw new BadRequestException(
+        `Cannot change status from "${currentStatus}" to "${newStatus}". ` +
+          `Allowed transitions: ${allowed.join(', ') || 'none'}`,
+      );
+    }
+  }
 }
