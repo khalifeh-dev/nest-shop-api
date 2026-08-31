@@ -138,9 +138,33 @@ export class CommentController {
   @Patch(':id/set-status')
   @ApiOperation({ summary: 'set comment status' })
   @HttpCode(HttpStatus.OK)
-  public async setStatus(@Param("id") id: string, @Query("status") status: CommentStatus) {
+  public async setStatus(
+    @Param('id') id: string,
+    @Query('status') status: CommentStatus,
+  ) {
     const comment = this.commentService.setStatus(id, status);
-    
+
     return comment;
+  }
+
+  @Get(':productId')
+  @ApiOperation({ summary: 'Find product comments' })
+  @HttpCode(HttpStatus.OK)
+  public async getProductComments(
+    @Param('productId') productId: string,
+    @Query('limit') limit: number = 20,
+    @Query('page') page: number = 1,
+    @Query('offset') offset: number = 3,
+    @Query('status') status: string = CommentStatus.APPROVED,
+  ) {
+    const productComments = await this.commentService.getProductComment(
+      productId,
+      limit,
+      page,
+      offset,
+      status
+    );
+
+    return productComments;
   }
 }

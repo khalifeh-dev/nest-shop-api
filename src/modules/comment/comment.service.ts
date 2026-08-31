@@ -405,7 +405,7 @@ export class CommentService {
         throw error;
       let message = ErrorUtil.getMessage(error);
       this.logger.error(
-        `❌ Unexpected error in create comment: ${message}`,
+        `❌ Unexpected error in soft delete comment: ${message}`,
         'CommentService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
@@ -456,7 +456,7 @@ export class CommentService {
         throw error;
       let message = ErrorUtil.getMessage(error);
       this.logger.error(
-        `❌ Unexpected error in create comment: ${message}`,
+        `❌ Unexpected error in hard delete comment: ${message}`,
         'CommentService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
@@ -514,7 +514,7 @@ export class CommentService {
       );
 
       const existingComment = await this.findOne(commentId);
-      
+
       if (existingComment.status === status) {
         this.logger.warn(
           `⛔ Comment has already been this status`,
@@ -567,7 +567,52 @@ export class CommentService {
         throw error;
       let message = ErrorUtil.getMessage(error);
       this.logger.error(
-        `❌ Unexpected error in create comment: ${message}`,
+        `❌ Unexpected error in set status comment: ${message}`,
+        'CommentService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  //! Need fix a bug
+  public async getProductComment(
+    productId: string,
+    limit: number = 20,
+    page: number = 1,
+    offset: number = 3,
+    status: Omit<CommentStatus, "DELETED" | "HIDDEN">
+  ) {
+    try {
+      this.logger.info(
+        `🔍 Get product: ${productId} comments`,
+        'CommentService',
+      );
+      //! await this.productService.findOne(productId)
+
+      const comments = await this.findAll({
+        limit,
+        page,
+        offset,
+        productId,
+        ...(status === undefined && { status: CommentStatus.APPROVED })
+      });
+
+      this.logger.info(
+        `✅ Get product: ${productId} comments successfuly`,
+        'CommentService',
+      );
+
+      return comments;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in get product comment comment: ${message}`,
         'CommentService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
