@@ -188,4 +188,23 @@ export class CommentController {
 
     return userComments;
   }
+
+  @Get(':id/replies')
+  @ApiOperation({ summary: 'Get replies of a comment (with pagination)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'offset', required: false, type: Number, example: 0, description: 'Skip first N replies (for loading more)' })
+  async getReplies(
+    @Param('id') parentId: string,
+    @Query('limit') limit?: number,
+    @Query('page') page?: number,
+    @Query('offset') offset?: number,
+  ) {
+    return this.commentService.getReplies(
+      parentId,
+      limit || 20,
+      page || 1,
+      offset || 0,
+    );
+  }
 }

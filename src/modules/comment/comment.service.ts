@@ -16,6 +16,7 @@ import { UserService } from '../user/user.service';
 import { FindAll } from '../../common/types/find-all.type';
 import { GetCommentDto } from './dto/get-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
+import { Pagination } from '../../common/utils/pagination';
 
 @Injectable()
 export class CommentService {
@@ -108,8 +109,7 @@ export class CommentService {
         offset = 3,
       } = dto;
 
-      const finalLimit = Math.min(Math.max(limit, 1), 50);
-      const skip = (page - 1) * finalLimit;
+      const { finalLimit, skip } = Pagination.values(limit, page);
       const replyOffset = Math.min(Math.max(offset || 3, 1), 10);
 
       const where: any = {
@@ -644,6 +644,81 @@ export class CommentService {
       );
 
       return comments;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in get product comment comment: ${message}`,
+        'CommentService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async getReplies(
+    parentId: string,
+    limit: number = 20,
+    page: number = 1,
+    offset: number = 0
+  ) {
+    try {
+      this.logger.info(
+        `🔍 Get comment with parent ID: ${parentId}`,
+        'CommentService',
+      );
+      await this.findOne(parentId);
+
+      const { finalLimit, skip } = Pagination.values(limit, page);
+      const finalSkip = skip + offset
+
+      const [replies, total] = await Promise.all([
+        this.prisma.replica.comment.findMany({
+          where: {
+            parentId,
+            isDeleted: false,
+            status: CommentStatus.APPROVED,
+          },
+          skip: finalSkip,
+          take: finalLimit,
+          orderBy: { createdAt: 'asc' },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                avatar: true,
+              },
+            },
+          },
+        }),
+        this.prisma.replica.comment.count({
+          where: {
+            parentId,
+            isDeleted: false,
+            status: CommentStatus.APPROVED,
+          },
+        }),
+      ]);
+
+      const totalPages = Math.ceil(total / finalLimit);
+
+      this.logger.info(`✅ Get comment replies successfuly`, 'CommentService');
+
+      return {
+        data: replies,
+        total,
+        offset,
+        limit: finalLimit,
+        page,
+        pages: totalPages,
+      };
     } catch (error) {
       if (
         error instanceof NotFoundException ||
