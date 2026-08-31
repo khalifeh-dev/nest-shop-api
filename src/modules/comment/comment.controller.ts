@@ -105,11 +105,33 @@ export class CommentController {
   @Patch(':id')
   @ApiOperation({ summary: 'Find a comment' })
   @HttpCode(HttpStatus.OK)
-  public async update(@Param("id") id: string, @Body() dto: UpdateCommentDto) {
+  public async update(@Param('id') id: string, @Body() dto: UpdateCommentDto) {
+    const comment = await this.commentService.update(id, dto);
 
-    const comment = await this.commentService.update(id, dto)
+    return comment;
+  }
 
-    return comment
-    
+  @Patch(':id/soft-delete')
+  @ApiOperation({ summary: 'Soft delete a comment' })
+  @HttpCode(HttpStatus.OK)
+  public async softDelete(@Param('id') id: string) {
+    const comment = await this.commentService.softDelete(id);
+    return comment;
+  }
+
+  @Patch(':id/hard-delete')
+  @ApiOperation({ summary: 'hard delete a comment' })
+  @HttpCode(HttpStatus.OK)
+  public async hardDelete(@Param('id') id: string) {
+    const comment = await this.commentService.hardDelete(id);
+    return comment;
+  }
+
+  @Patch(':id/restore')
+  @ApiOperation({ summary: 'restore a comment' })
+  @HttpCode(HttpStatus.OK)
+  public async restore(@Param('id') id: string) {
+    const comment = await this.commentService.restore(id);
+    return comment;
   }
 }

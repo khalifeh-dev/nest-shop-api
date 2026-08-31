@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -9,7 +10,7 @@ import {
 import { DatabaseService } from '../../common/database/database.service';
 import type { LoggerService } from '../../common/services/logger/logger-options.interface';
 import { CreateCommentDto } from './dto/create-comment.dto';
-import { Comment } from '@prisma/client';
+import { Comment, CommentStatus } from '@prisma/client';
 import { ErrorUtil } from '../../common/utils/error.util';
 import { UserService } from '../user/user.service';
 import { FindAll } from '../../common/types/find-all.type';
@@ -75,7 +76,11 @@ export class CommentService {
 
       return comment;
     } catch (error) {
-      if (error instanceof NotFoundException) throw error;
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
       let message = ErrorUtil.getMessage(error);
       this.logger.error(
         `❌ Unexpected error in create comment: ${message}`,
@@ -268,7 +273,7 @@ export class CommentService {
           `⛔ Comment with ID ${id} has already deleted`,
           'CommentService',
         );
-        throw new NotFoundException(
+        throw new BadRequestException(
           `Comment with ID ${id} has already deleted`,
         );
       }
@@ -333,6 +338,168 @@ export class CommentService {
       let message = ErrorUtil.getMessage(error);
       this.logger.error(
         `❌ Unexpected error in update comment: ${message}`,
+        'CommentService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async softDelete(id: string) {
+    try {
+      this.logger.info(
+        `🪓 Soft delete comment with ID: ${id}`,
+        'CommentService',
+      );
+      await this.findOne(id);
+
+      const replyCount = await this.prisma.replica.comment.count({
+        where: { parentId: id, isDeleted: false },
+      });
+
+      if (replyCount > 0) {
+        await this.prisma.master.comment.updateMany({
+          where: { parentId: id },
+          data: {
+            isDeleted: true,
+            deletedAt: new Date(),
+            status: CommentStatus.DELETED,
+          },
+        });
+      }
+
+      const deletedComment = await this.prisma.transaction(async (tx) => {
+        const comment = await tx.comment.update({
+          where: { id },
+          data: {
+            isDeleted: true,
+            deletedAt: new Date(),
+            status: CommentStatus.DELETED,
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                avatar: true,
+              },
+            },
+          },
+        });
+
+        return { comment, replyCounts: replyCount };
+      });
+
+      this.logger.info(
+        `🪓 Soft delete comment with ID: ${id} successfuly`,
+        'CommentService',
+      );
+
+      return deletedComment;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in create comment: ${message}`,
+        'CommentService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async hardDelete(id: string) {
+    try {
+      this.logger.info(
+        `🪓 Hard delete comment with ID: ${id}`,
+        'CommentService',
+      );
+
+      const existingComment = await this.findOne(id);
+
+      if (!existingComment.isDeleted) {
+        this.logger.warn(
+          `⛔ You cannot hard delete this because you must soft delete it first.`,
+          'CommentService',
+        );
+
+        throw new BadRequestException(
+          'Please soft delete the comment first before permanent deletion.',
+        );
+      }
+
+      const comment = await this.prisma.master.$transaction(async (tx) => {
+        await tx.comment.deleteMany({
+          where: { parentId: id },
+        });
+
+        await tx.comment.delete({
+          where: { id },
+        });
+      });
+
+      this.logger.info(
+        `🪓 Hard delete comment with ID: ${id} successfuly`,
+        'CommentService',
+      );
+
+      return comment;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in create comment: ${message}`,
+        'CommentService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async restore(id: string): Promise<Comment> {
+    try {
+      this.logger.info(`♻️ Restoring comment with ID: ${id}`, 'CommentService');
+
+      await this.findOne(id);
+
+      const restoredComment = await this.prisma.master.comment.update({
+        where: { id },
+        data: {
+          isDeleted: false,
+          deletedAt: null,
+          status: CommentStatus.PENDING,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              avatar: true,
+            },
+          },
+        },
+      });
+
+      this.logger.info(
+        `✅ Comment restored successfully: ${restoredComment.id}`,
+        'CommentService',
+      );
+
+      return restoredComment;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in restore comment: ${message}`,
         'CommentService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
