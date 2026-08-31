@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -12,9 +14,12 @@ import { ErrorUtil } from '../../common/utils/error.util';
 import { UserService } from '../user/user.service';
 import { FindAll } from '../../common/types/find-all.type';
 import { GetCommentDto } from './dto/get-comment.dto';
+import { UpdateCommentDto } from './dto/update-comment.dto';
 
 @Injectable()
 export class CommentService {
+  private readonly EDIT_WINDOW_MINUTES = 5;
+
   constructor(
     private prisma: DatabaseService,
     private userService: UserService,
@@ -34,19 +39,7 @@ export class CommentService {
 
       let parentComment: any = null;
 
-      if (parentId) {
-        parentComment = await this.prisma.replica.comment.findUnique({
-          where: { id: parentId },
-        });
-
-        if (!parentComment) {
-          this.logger.warn(`⛔ Parent comment id not found`, 'CommentService');
-
-          throw new NotFoundException(
-            `Parent Comment Not Found With ID ${parentId} ❌.`,
-          );
-        }
-      }
+      if (parentId) parentComment = await this.findOne(parentId);
 
       const comment: Comment = await this.prisma.replica.comment.create({
         data: {
@@ -288,6 +281,58 @@ export class CommentService {
       let message = ErrorUtil.getMessage(error);
       this.logger.error(
         `❌ Unexpected error in find one comment: ${message}`,
+        'CommentService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async update(id: string, dto: UpdateCommentDto): Promise<Comment> {
+    try {
+      this.logger.info(`🧩 Update comment with ID: ${id}`, 'CommentService');
+
+      const existingComment = await this.findOne(id);
+
+      const now = new Date();
+      const createdAt = new Date(existingComment.createdAt);
+      const minutesDiff = (now.getTime() - createdAt.getTime()) / 60000;
+
+      if (minutesDiff > this.EDIT_WINDOW_MINUTES) {
+        throw new BadRequestException(
+          `You can only edit comments within ${this.EDIT_WINDOW_MINUTES} minutes of creation.`,
+        );
+      }
+      const comment: Comment = await this.prisma.master.comment.update({
+        where: { id },
+        data: { ...dto, editedAt: new Date() },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              avatar: true,
+            },
+          },
+        },
+      });
+
+      this.logger.info(
+        `🧩 Updated comment with ID: ${id} successfuly`,
+        'CommentService',
+      );
+
+      return comment;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in update comment: ${message}`,
         'CommentService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
