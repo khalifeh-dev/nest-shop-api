@@ -624,8 +624,8 @@ model Comment {
 model Cart {
   id          String      @id @default(cuid())
   
-  userId      String      @unique @map("user_id")
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String?     @map("user_id")
+  user        User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   status      CartStatus  @default(ACTIVE)
   
@@ -633,6 +633,8 @@ model Cart {
   discount    Decimal     @default(0) @db.Decimal(10, 2)
   total       Decimal     @default(0) @db.Decimal(10, 2)
   
+  guestToken  String?     @unique @map("guest_token") 
+
   discountId  String?     @map("discount_id")
   discountRef Discount?   @relation(fields: [discountId], references: [id])
   
