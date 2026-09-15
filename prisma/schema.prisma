@@ -117,6 +117,48 @@ enum CommentStatus {
   HIDDEN 
 }
 
+enum CartStatus {
+  ACTIVE
+  CHECKOUT
+  ABANDONED
+  MERGED
+  EXPIRED
+}
+
+enum DiscountType {
+  PERCENTAGE  
+  FIXED    
+  FREE_SHIPPING 
+}
+
+enum DiscountScope {
+  ALL_PRODUCTS       
+  SPECIFIC_PRODUCTS  
+  SPECIFIC_CATEGORIES
+  FIRST_ORDER        
+  USER_SPECIFIC      
+}
+
+enum DiscountStatus {
+  DRAFT  
+  ACTIVE  
+  EXPIRED 
+  DISABLED 
+  EXHAUSTED 
+}
+
+enum DiscountTargetType {
+  PRODUCT
+  CATEGORY
+  USER
+}
+
+enum DiscountUsageStatus {
+  USED
+  REFUNDED
+  CANCELLED
+}
+
 //! <----------------------------------------<< Moldes >>---------------------------------------->
 
 //? <----------------------- User ----------------------->
@@ -160,7 +202,10 @@ model User {
   userNotifications    UserNotification[]
   products             Product[]
   tickets              Ticket[]
-  comments    Comment[]
+  comments             Comment[]
+  discountUsage        DiscountUsage[]
+  userDiscounts        Discount[] @relation("UserDiscounts")
+  cart                 Cart[]
 }
 
 
@@ -422,7 +467,8 @@ model Product {
   // bookmarks    Bookmark[]
   // comments     Comment[]
   // orderItems   OrderItem[]
-  // cartItems   CartItem[]
+  cartItems   CartItem[]
+  discountProduct   DiscountProduct[]
   // savedCardItems SavedCartItem[]
 
   @@map("products")
@@ -479,7 +525,8 @@ model Category {
   deletedAt   DateTime? @map("deleted_at")
   isDeleted   Boolean   @default(false) @map("is_deleted")
 
-  products    ProductCategory[]
+  products            ProductCategory[]
+  categoryDiscount    DiscountCategory[]
 
   @@map("categories")
 }
@@ -529,7 +576,6 @@ model Ticket {
   @@map("tickets")
 }
 
-
 //? <----------------------- Comment ----------------------->
 model Comment {
   id         String    @id @default(cuid())
@@ -572,4 +618,163 @@ model Comment {
   @@index([rating])
   @@index([productId, status])
   @@map("comments")
+}
+
+//? <----------------------- Card ----------------------->
+model Cart {
+  id          String      @id @default(cuid())
+  
+  userId      String      @unique @map("user_id")
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  status      CartStatus  @default(ACTIVE)
+  
+  subtotal    Decimal     @default(0) @db.Decimal(10, 2)
+  discount    Decimal     @default(0) @db.Decimal(10, 2)
+  total       Decimal     @default(0) @db.Decimal(10, 2)
+  
+  discountId  String?     @map("discount_id")
+  discountRef Discount?   @relation(fields: [discountId], references: [id])
+  
+  itemCount   Int         @default(0) @map("item_count")
+  note        String?     @db.Text
+  
+  expiresAt   DateTime?   @map("expires_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  
+  items       CartItem[]
+  
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("carts")
+}
+
+//? <----------------------- Card Item ----------------------->
+model CartItem {
+  id          String   @id @default(cuid())
+  
+  cartId      String   @map("cart_id")
+  cart        Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  
+  productId   String   @map("product_id")
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  // variantId   String?  @map("variant_id") 
+  
+  quantity    Int      @default(1)
+  price       Decimal  @db.Decimal(10, 2) 
+  discount    Decimal  @default(0) @db.Decimal(10, 2)
+  total       Decimal  @db.Decimal(10, 2) 
+  
+  selected    Boolean  @default(true)
+  
+  productSnapshot Json?
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@unique([cartId, productId])
+  @@index([cartId])
+  @@index([productId])
+  @@map("cart_items")
+}
+
+//? <----------------------- Discount -----------------------> 
+model Discount {
+  id          String   @id @default(cuid())
+  
+  code        String   @unique
+  title       String
+  description String?  @db.Text
+  
+  type        DiscountType  @default(PERCENTAGE)
+  scope       DiscountScope @default(ALL_PRODUCTS)
+  
+  value       Decimal  @db.Decimal(10, 2)
+  maxAmount   Decimal? @db.Decimal(10, 2) @map("max_amount")
+  minOrderAmount Decimal? @db.Decimal(10, 2) @map("min_order_amount")
+  
+  usageLimit  Int      @default(1) @map("usage_limit")
+  usedCount   Int      @default(0) @map("used_count")
+  perUserLimit Int     @default(1) @map("per_user_limit")
+  
+  startsAt    DateTime @map("starts_at")
+  expiresAt   DateTime @map("expires_at")
+  
+  status      DiscountStatus @default(ACTIVE)
+  
+  targetType  DiscountTargetType? @map("target_type")
+  
+  isFirstOrder Boolean @default(false) @map("is_first_order")
+  
+  users       User[]   @relation("UserDiscounts")
+  products    DiscountProduct[]
+  categories  DiscountCategory[] 
+  
+  carts       Cart[]
+  // orders      Order[]
+  usages      DiscountUsage[]
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@index([code])
+  @@index([status])
+  @@index([startsAt])
+  @@index([expiresAt])
+  @@index([isFirstOrder])
+  @@map("discounts")
+}
+
+//? <----------------------- Discount Product -----------------------> 
+model DiscountProduct {
+  discountId  String   @map("discount_id")
+  discount    Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  
+  productId   String   @map("product_id")
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  @@id([discountId, productId])
+  @@map("discount_products")
+}
+
+//? <----------------------- Discount Category -----------------------> 
+model DiscountCategory {
+  discountId  String   @map("discount_id")
+  discount    Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  
+  categoryId  String   @map("category_id")
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  @@id([discountId, categoryId])
+  @@map("discount_categories")
+}
+
+model DiscountUsage {
+  id          String   @id @default(cuid())
+  
+  discountId  String   @map("discount_id")
+  discount    Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // orderId     String?  @map("order_id")
+  // order       Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  
+  discountAmount Decimal @db.Decimal(10, 2) @map("discount_amount")
+  
+  status      DiscountUsageStatus @default(USED)
+  
+  ipAddress   String?  @map("ip_address") @db.VarChar(45)
+  userAgent   String?  @map("user_agent") @db.Text
+  
+  usedAt      DateTime @default(now()) @map("used_at")
+  
+  @@index([discountId])
+  @@index([userId])
+  // @@index([orderId])
+  @@map("discount_usages")
 }
