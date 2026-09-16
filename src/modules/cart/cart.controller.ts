@@ -69,4 +69,11 @@ export class CartController {
   public async clearCart(@CurrentUser('sub') userId: string) {
     return this.cartService.clearCart(userId);
   }
+
+  @Delete('clear-selected')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Clear selected items from cart' })
+  public async clearSelectedItems(@CurrentUser('sub') userId: string) {
+    return this.cartService.clearSelectedItems(userId);
+  }
 }

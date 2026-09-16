@@ -423,6 +423,71 @@ export class CartService {
     }
   }
 
+  public async clearSelectedItems(userId: string) {
+    try {
+      this.logger.info(
+        `🧹 Clearing selected items for user: ${userId}`,
+        'CartService',
+      );
+
+      const cart = await this.prisma.replica.cart.findFirst({
+        where: {
+          userId,
+          status: CartStatus.ACTIVE,
+        },
+      });
+
+      if (!cart) {
+        throw new NotFoundException(`No active cart found for user: ${userId}`);
+      }
+
+      const updatedCart = await this.prisma.master.$transaction(async (tx) => {
+        await tx.cartItem.deleteMany({
+          where: {
+            cartId: cart.id,
+            selected: true,
+          },
+        });
+
+        await this.recalculateCartTotals(cart.id, tx);
+
+        return tx.cart.findUnique({
+          where: { id: cart.id },
+          include: {
+            items: {
+              include: {
+                product: {
+                  select: {
+                    id: true,
+                    title: true,
+                    price: true,
+                    images: true,
+                    stock: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+      });
+
+      this.logger.info(
+        `✅ Selected items cleared for user: ${userId}`,
+        'CartService',
+      );
+
+      return updatedCart;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in clear selected items: ${message}`,
+        'CartService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
   private async mergeGuestCart(
     userCartId: string,
     guestCartId: string,
