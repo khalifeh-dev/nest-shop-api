@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -8,14 +9,16 @@ import { DatabaseService } from '../../common/database/database.service';
 import type { LoggerService } from '../../common/services/logger/logger-options.interface';
 import { ErrorUtil } from '../../common/utils/error.util';
 import { UserService } from '../user/user.service';
-import { threadId } from 'worker_threads';
 import { CartStatus } from '@prisma/client';
+import { ProductService } from '../product/product.service';
+import { AddItemDto } from './dto/add-item.dto';
 
 @Injectable()
 export class CartService {
   constructor(
     private prisma: DatabaseService,
     private userService: UserService,
+    private productService: ProductService,
     @Inject('LoggerService') private logger: LoggerService,
   ) {}
 
@@ -28,28 +31,7 @@ export class CartService {
 
       await this.userService.secureFindOne(userId);
 
-      let userCart = await this.prisma.master.cart.findFirst({
-        where: { userId, status: CartStatus.ACTIVE },
-        orderBy: { createdAt: 'desc' },
-        include: { items: true },
-      });
-
-      if (!userCart) {
-        await this.prisma.master.cart.updateMany({
-          where: {
-            userId,
-            status: CartStatus.ACTIVE,
-          },
-          data: {
-            status: CartStatus.MERGED,
-          },
-        });
-
-        userCart = await this.prisma.master.cart.create({
-          data: { userId, status: CartStatus.ACTIVE },
-          include: { items: true },
-        });
-      }
+      let userCart = await this.getOrCreateActiveCart(userId);
 
       if (guestCartId) {
         await this.mergeGuestCart(userCart.id, guestCartId, userId);
@@ -74,7 +56,118 @@ export class CartService {
       let message = ErrorUtil.getMessage(error);
       this.logger.error(
         `❌ Unexpected error in create user: ${message}`,
-        'UserService',
+        'CartService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async addItem(userId: string, dto: AddItemDto) {
+    try {
+      this.logger.info(
+        `🛒 Adding product ${dto.productId} to cart for user: ${userId}`,
+        'CartService',
+      );
+
+      await this.userService.secureFindOne(userId);
+      const product = await this.productService.findOne(dto.productId);
+
+      if (product.stock < dto.quantity) {
+        this.logger.warn(
+          `Insufficient stock. Available: ${product.stock}, Requested: ${dto.quantity}`,
+          'CartService',
+        );
+        throw new BadRequestException(
+          `Insufficient stock. Available: ${product.stock}, Requested: ${dto.quantity}`,
+        );
+      }
+
+      const cart = await this.getOrCreateActiveCart(userId);
+
+      const existingItem = cart.items.find(
+        (item) => item.productId === dto.productId,
+      );
+
+      const updatedCart = await this.prisma.transaction(async (tx) => {
+        if (existingItem) {
+          const newQuantity = existingItem.quantity + dto.quantity;
+
+          if (newQuantity > product.stock) {
+            this.logger.warn(
+              `Cannot add more. Total would be ${newQuantity}, but only ${product.stock} available.`,
+              'CartService',
+            );
+            throw new BadRequestException(
+              `Cannot add more. Total would be ${newQuantity}, but only ${product.stock} available.`,
+            );
+          }
+
+          await tx.cartItem.update({
+            where: { id: existingItem.id },
+            data: {
+              quantity: newQuantity,
+              total: Number(product.price) * newQuantity,
+            },
+          });
+
+          this.logger.debug(
+            `🔄 Updated item ${dto.productId}: ${existingItem.quantity} → ${newQuantity}`,
+            'CartService',
+          );
+        } else {
+          await tx.cartItem.create({
+            data: {
+              cartId: cart.id,
+              productId: dto.productId,
+              quantity: dto.quantity,
+              price: product.price,
+              discount: 0,
+              total: Number(product.price) * dto.quantity,
+              selected: true,
+            },
+          });
+
+          this.logger.debug(
+            `➕ Added new item ${dto.productId} to cart`,
+            'CartService',
+          );
+        }
+
+        await this.recalculateCartTotals(cart.id, tx);
+
+        return tx.cart.findUnique({
+          where: { id: cart.id },
+          include: {
+            items: {
+              include: {
+                product: {
+                  select: {
+                    id: true,
+                    title: true,
+                    price: true,
+                    images: true,
+                    stock: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+      });
+
+      this.logger.info(`✅ Product added to cart successfully`, 'CartService');
+
+      return updatedCart;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in add item user: ${message}`,
+        'CartService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
@@ -197,6 +290,43 @@ export class CartService {
       );
       throw error;
     }
+  }
+
+  private async getOrCreateActiveCart(userId: string, tx?: any): Promise<any> {
+    const prismaClient = tx || this.prisma.master;
+
+    let cart = await this.prisma.replica.cart.findFirst({
+      where: {
+        userId,
+        status: CartStatus.ACTIVE,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { items: true },
+    });
+
+    if (!cart) {
+      await prismaClient.cart.updateMany({
+        where: {
+          userId,
+          status: CartStatus.ACTIVE,
+        },
+        data: {
+          status: CartStatus.MERGED,
+        },
+      });
+
+      cart = await prismaClient.cart.create({
+        data: {
+          userId,
+          status: CartStatus.ACTIVE,
+        },
+        include: { items: true },
+      });
+
+      this.logger.info(`✅ Cart created for user: ${userId}`, 'CartService');
+    }
+
+    return cart;
   }
 
   private async recalculateCartTotals(cartId: string, tx?: any): Promise<void> {
