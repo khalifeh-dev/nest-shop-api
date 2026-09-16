@@ -185,6 +185,8 @@ export class CartService {
         'CartService',
       );
 
+      await this.userService.secureFindOne(userId);
+
       const cartItem = await this.prisma.replica.cartItem.findFirst({
         where: {
           id: itemId,
@@ -285,6 +287,136 @@ export class CartService {
       let message = ErrorUtil.getMessage(error);
       this.logger.error(
         `❌ Unexpected error in update item user: ${message}`,
+        'CartService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async removeItem(userId: string, itemId: string) {
+    try {
+      this.logger.info(
+        `🗑️ Removing cart item ${itemId} for user: ${userId}`,
+        'CartService',
+      );
+
+      await this.userService.secureFindOne(userId);
+
+      const cartItem = await this.prisma.replica.cartItem.findFirst({
+        where: {
+          id: itemId,
+          cart: {
+            userId,
+            status: CartStatus.ACTIVE,
+          },
+        },
+        include: { cart: true },
+      });
+
+      if (!cartItem) {
+        throw new NotFoundException(
+          `Cart item with ID ${itemId} not found in your active cart.`,
+        );
+      }
+
+      const updatedCart = await this.prisma.transaction(async (tx) => {
+        await tx.cartItem.delete({
+          where: { id: itemId },
+        });
+
+        await this.recalculateCartTotals(cartItem.cartId, tx);
+
+        return tx.cart.findUnique({
+          where: { id: cartItem.cartId },
+          include: {
+            items: {
+              include: {
+                product: {
+                  select: {
+                    id: true,
+                    title: true,
+                    price: true,
+                    images: true,
+                    stock: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+      });
+
+      this.logger.info(`✅ Cart item removed: ${itemId}`, 'CartService');
+      return updatedCart;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in remove item user: ${message}`,
+        'CartService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async clearCart(userId: string) {
+    try {
+      this.logger.info(`🧹 Clearing cart for user: ${userId}`, 'CartService');
+
+      await this.userService.secureFindOne(userId);
+
+      const cart = await this.prisma.replica.cart.findFirst({
+        where: {
+          userId,
+          status: CartStatus.ACTIVE,
+        },
+      });
+
+      if (!cart) {
+        throw new NotFoundException(`No active cart found for user: ${userId}`);
+      }
+
+      const updatedCart = await this.prisma.transaction(async (tx) => {
+        await tx.cartItem.deleteMany({
+          where: { cartId: cart.id },
+        });
+
+        await tx.cart.update({
+          where: { id: cart.id },
+          data: {
+            subtotal: 0,
+            discount: 0,
+            total: 0,
+            itemCount: 0,
+            discountId: null,
+          },
+        });
+
+        return tx.cart.findUnique({
+          where: { id: cart.id },
+          include: { items: true },
+        });
+      });
+
+      this.logger.info(
+        `✅ Cart cleared successfully for user: ${userId}`,
+        'CartService',
+      );
+
+      return updatedCart;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in clear cart user: ${message}`,
         'CartService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   HttpCode,
   HttpStatus,
   Param,
@@ -51,5 +52,21 @@ export class CartController {
     @Body() dto: UpdateCartItemDto,
   ) {
     return this.cartService.updateItem(userId, itemId, dto);
+  }
+
+  @Delete('items/:itemId')
+  @ApiOperation({ summary: 'Remove item from cart' })
+  public async removeItem(
+    @CurrentUser('sub') userId: string,
+    @Param('itemId') itemId: string,
+  ) {
+    return this.cartService.removeItem(userId, itemId);
+  }
+
+  @Delete('clear')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Clear all items from cart' })
+  public async clearCart(@CurrentUser('sub') userId: string) {
+    return this.cartService.clearCart(userId);
   }
 }
