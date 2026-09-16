@@ -4,6 +4,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
 } from '@nestjs/common';
 import { CartService } from './cart.service';
@@ -11,6 +12,7 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CreateCartDto } from './dto/create-cart.dto';
 import { AddItemDto } from './dto/add-item.dto';
+import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 
 @Controller('cart')
 @ApiTags('Carts')
@@ -39,5 +41,15 @@ export class CartController {
     @Body() dto: AddItemDto,
   ) {
     return this.cartService.addItem(userId, dto);
+  }
+
+  @Patch('items/:itemId')
+  @ApiOperation({ summary: 'Update cart item (quantity or selected)' })
+  public async updateItem(
+    @CurrentUser('sub') userId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateCartItemDto,
+  ) {
+    return this.cartService.updateItem(userId, itemId, dto);
   }
 }

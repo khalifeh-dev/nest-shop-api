@@ -12,6 +12,7 @@ import { UserService } from '../user/user.service';
 import { CartStatus } from '@prisma/client';
 import { ProductService } from '../product/product.service';
 import { AddItemDto } from './dto/add-item.dto';
+import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 
 @Injectable()
 export class CartService {
@@ -167,6 +168,123 @@ export class CartService {
       let message = ErrorUtil.getMessage(error);
       this.logger.error(
         `❌ Unexpected error in add item user: ${message}`,
+        'CartService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async updateItem(
+    userId: string,
+    itemId: string,
+    dto: UpdateCartItemDto,
+  ) {
+    try {
+      this.logger.info(
+        `✏️ Updating cart item ${itemId} for user: ${userId}`,
+        'CartService',
+      );
+
+      const cartItem = await this.prisma.replica.cartItem.findFirst({
+        where: {
+          id: itemId,
+          cart: {
+            userId,
+            status: CartStatus.ACTIVE,
+          },
+        },
+        include: {
+          product: {
+            select: {
+              id: true,
+              title: true,
+              price: true,
+              stock: true,
+              isActive: true,
+            },
+          },
+          cart: true,
+        },
+      });
+
+      if (!cartItem) {
+        throw new NotFoundException(
+          `Cart item with ID ${itemId} not found in your active cart.`,
+        );
+      }
+
+      if (!cartItem.product.isActive) {
+        throw new BadRequestException('Product is not active.');
+      }
+
+      if (dto.quantity !== undefined) {
+        if (dto.quantity < 1) {
+          throw new BadRequestException('Quantity must be at least 1.');
+        }
+
+        if (dto.quantity > cartItem.product.stock) {
+          throw new BadRequestException(
+            `Insufficient stock. Available: ${cartItem.product.stock}, Requested: ${dto.quantity}`,
+          );
+        }
+      }
+
+      const updatedCart = await this.prisma.master.$transaction(async (tx) => {
+        const updateData: any = {};
+
+        if (dto.quantity) {
+          updateData.quantity = dto.quantity;
+          updateData.total = Number(cartItem.product.price) * dto.quantity;
+        }
+
+        if (dto.selected) updateData.selected = dto.selected;
+
+        if (Object.keys(updateData).length === 0) {
+          throw new BadRequestException('No valid fields to update.');
+        }
+
+        await tx.cartItem.update({
+          where: { id: itemId },
+          data: updateData,
+        });
+
+        await this.recalculateCartTotals(cartItem.cartId, tx);
+
+        return tx.cart.findUnique({
+          where: { id: cartItem.cartId },
+          include: {
+            items: {
+              include: {
+                product: {
+                  select: {
+                    id: true,
+                    title: true,
+                    price: true,
+                    images: true,
+                    stock: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+      });
+
+      this.logger.info(
+        `✅ Cart item updated successfully: ${itemId}`,
+        'CartService',
+      );
+
+      return updatedCart;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in update item user: ${message}`,
         'CartService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
