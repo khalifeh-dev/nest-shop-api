@@ -9,10 +9,12 @@ import { DatabaseService } from '../../common/database/database.service';
 import type { LoggerService } from '../../common/services/logger/logger-options.interface';
 import { ErrorUtil } from '../../common/utils/error.util';
 import { UserService } from '../user/user.service';
-import { CartStatus } from '@prisma/client';
+import { CartStatus, Prisma } from '@prisma/client';
 import { ProductService } from '../product/product.service';
 import { AddItemDto } from './dto/add-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
+
+type IncludeCartItem = Prisma.CartItemInclude;
 
 @Injectable()
 export class CartService {
@@ -187,15 +189,11 @@ export class CartService {
 
       await this.userService.secureFindOne(userId);
 
-      const cartItem = await this.prisma.replica.cartItem.findFirst({
-        where: {
-          id: itemId,
-          cart: {
-            userId,
-            status: CartStatus.ACTIVE,
-          },
-        },
-        include: {
+      const cartItem = await this.findOneCartItem(
+        userId,
+        itemId,
+        CartStatus.ACTIVE,
+        {
           product: {
             select: {
               id: true,
@@ -205,15 +203,8 @@ export class CartService {
               isActive: true,
             },
           },
-          cart: true,
         },
-      });
-
-      if (!cartItem) {
-        throw new NotFoundException(
-          `Cart item with ID ${itemId} not found in your active cart.`,
-        );
-      }
+      );
 
       if (!cartItem.product.isActive) {
         throw new BadRequestException('Product is not active.');
@@ -302,22 +293,7 @@ export class CartService {
 
       await this.userService.secureFindOne(userId);
 
-      const cartItem = await this.prisma.replica.cartItem.findFirst({
-        where: {
-          id: itemId,
-          cart: {
-            userId,
-            status: CartStatus.ACTIVE,
-          },
-        },
-        include: { cart: true },
-      });
-
-      if (!cartItem) {
-        throw new NotFoundException(
-          `Cart item with ID ${itemId} not found in your active cart.`,
-        );
-      }
+      const cartItem = await this.findOneCartItem(userId, itemId);
 
       const updatedCart = await this.prisma.transaction(async (tx) => {
         await tx.cartItem.delete({
@@ -368,17 +344,7 @@ export class CartService {
       this.logger.info(`🧹 Clearing cart for user: ${userId}`, 'CartService');
 
       await this.userService.secureFindOne(userId);
-
-      const cart = await this.prisma.replica.cart.findFirst({
-        where: {
-          userId,
-          status: CartStatus.ACTIVE,
-        },
-      });
-
-      if (!cart) {
-        throw new NotFoundException(`No active cart found for user: ${userId}`);
-      }
+      const cart = await this.findOneCart(userId);
 
       const updatedCart = await this.prisma.transaction(async (tx) => {
         await tx.cartItem.deleteMany({
@@ -430,16 +396,8 @@ export class CartService {
         'CartService',
       );
 
-      const cart = await this.prisma.replica.cart.findFirst({
-        where: {
-          userId,
-          status: CartStatus.ACTIVE,
-        },
-      });
-
-      if (!cart) {
-        throw new NotFoundException(`No active cart found for user: ${userId}`);
-      }
+      await this.userService.secureFindOne(userId);
+      const cart = await this.findOneCart(userId);
 
       const updatedCart = await this.prisma.master.$transaction(async (tx) => {
         await tx.cartItem.deleteMany({
@@ -482,6 +440,89 @@ export class CartService {
       const message = ErrorUtil.getMessage(error);
       this.logger.error(
         `❌ Unexpected error in clear selected items: ${message}`,
+        'CartService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async findOneCartItem(
+    userId: string,
+    itemId: string,
+    status: CartStatus = CartStatus.ACTIVE,
+    include?: IncludeCartItem,
+  ) {
+    try {
+      this.logger.info(
+        `🔍 Find a cart item with ID: ${itemId} for user: ${userId}`,
+        'CartService',
+      );
+
+      const cartItem = await this.prisma.replica.cartItem.findFirst({
+        where: {
+          id: itemId,
+          cart: {
+            userId,
+            status,
+          },
+        },
+        include: { cart: true, ...include },
+      });
+
+      if (!cartItem) {
+        this.logger.warn(
+          `⛔ Cart item with ID ${itemId} not found in your active cart.`,
+          'CartService',
+        );
+        throw new NotFoundException(
+          `Cart item with ID ${itemId} not found in your active cart.`,
+        );
+      }
+
+      this.logger.info(
+        `✅ Found a cart item with ID: ${itemId} for user: ${userId}`,
+        'CartService',
+      );
+
+      return cartItem;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in find one cart item: ${message}`,
+        'CartService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+  
+  public async findOneCart(userId: string) {
+    try {
+      this.logger.info(`🔍 Find a cart for user: ${userId}`, 'CartService');
+
+      const cart = await this.prisma.replica.cart.findFirst({
+        where: {
+          userId,
+          status: CartStatus.ACTIVE,
+        },
+      });
+
+      if (!cart) {
+        this.logger.warn(
+          `⛔ No active cart found for user: ${userId}`,
+          'CartService',
+        );
+        throw new NotFoundException(`No active cart found for user: ${userId}`);
+      }
+
+      this.logger.info(`✅ Found a cart for user: ${userId}`, 'CartService');
+
+      return cart;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      let message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in find one cart: ${message}`,
         'CartService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
