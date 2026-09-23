@@ -15,6 +15,7 @@ import { AddItemDto } from './dto/add-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 
 type IncludeCartItem = Prisma.CartItemInclude;
+type CartInclude = Prisma.CartInclude;
 
 @Injectable()
 export class CartService {
@@ -22,6 +23,7 @@ export class CartService {
     private prisma: DatabaseService,
     private userService: UserService,
     private productService: ProductService,
+    // private discountService: DiscountService,
     @Inject('LoggerService') private logger: LoggerService,
   ) {}
 
@@ -495,16 +497,22 @@ export class CartService {
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
-  
-  public async findOneCart(userId: string) {
+
+
+  public async findOneCart(
+    userId: string,
+    status: CartStatus = CartStatus.ACTIVE,
+    include?: CartInclude,
+  ) {
     try {
       this.logger.info(`🔍 Find a cart for user: ${userId}`, 'CartService');
 
       const cart = await this.prisma.replica.cart.findFirst({
         where: {
           userId,
-          status: CartStatus.ACTIVE,
+          status,
         },
+        include: { ...include },
       });
 
       if (!cart) {
@@ -707,5 +715,76 @@ export class CartService {
         itemCount,
       },
     });
+  }
+
+  private calculateShipping(subtotal: number): number {
+    const FREE_SHIPPING_THRESHOLD = 5000000;
+    const SHIPPING_COST = 100000;
+
+    if (subtotal >= FREE_SHIPPING_THRESHOLD) {
+      return 0;
+    }
+
+    return SHIPPING_COST;
+  }
+
+  private buildBreakdown(
+    items: any[],
+    totalDiscount: number,
+    tax: number,
+    shipping: number,
+  ) {
+    return {
+      items: items.map((item) => ({
+        id: item.id,
+        productId: item.productId,
+        title: item.product.title,
+        quantity: item.quantity,
+        unitPrice: Number(item.price),
+        discount: Number(item.discount),
+        total:
+          Number(item.price) * item.quantity -
+          Number(item.discount) * item.quantity,
+      })),
+      discounts: {
+        total: this.round(totalDiscount),
+      },
+      tax: {
+        amount: this.round(tax),
+      },
+      shipping: {
+        amount: this.round(shipping),
+        free: shipping === 0,
+      },
+    };
+  }
+
+  private emptyCartTotal() {
+    return {
+      subtotal: 0,
+      itemDiscounts: 0,
+      couponDiscount: 0,
+      totalDiscount: 0,
+      taxableAmount: 0,
+      tax: 0,
+      taxRate: 0,
+      shipping: 0,
+      total: 0,
+      currency: 'IRR',
+      itemCount: 0,
+      totalQuantity: 0,
+      coupon: null,
+      freeShipping: true,
+      breakdown: {
+        items: [],
+        discounts: { total: 0 },
+        tax: { amount: 0 },
+        shipping: { amount: 0, free: true },
+      },
+    };
+  }
+
+  private round(value: number): number {
+    return Math.round(value * 100) / 100;
   }
 }

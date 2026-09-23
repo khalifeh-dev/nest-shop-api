@@ -27,6 +27,10 @@ import { CategoryModule } from './modules/category/category.module';
 import { TicketModule } from './modules/ticket/ticket.module';
 import { CommentModule } from './modules/comment/comment.module';
 import { CartModule } from './modules/cart/cart.module';
+import { AddressModule } from './modules/address/address.module';
+import { OrderModule } from './modules/order/order.module';
+import { DiscountModule } from './modules/discount/discount.module';
+import { ShippingModule } from './modules/shipping/shipping.module';
 
 @Module({
   imports: [
@@ -113,6 +117,10 @@ import { CartModule } from './modules/cart/cart.module';
     TicketModule,
     CommentModule,
     CartModule,
+    AddressModule,
+    OrderModule,
+    DiscountModule,
+    ShippingModule,
   ],
   controllers: [AppController],
   providers: [

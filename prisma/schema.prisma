@@ -159,6 +159,34 @@ enum DiscountUsageStatus {
   CANCELLED
 }
 
+enum OrderStatus {
+  PENDING    
+  CONFIRMED  
+  PROCESSING 
+  SHIPPED    
+  DELIVERED  
+  CANCELLED  
+  REFUNDED   
+  RETURNED   
+}
+
+enum PaymentStatus {
+  UNPAID     
+  PENDING    
+  PAID       
+  FAILED     
+  REFUNDED   
+  PARTIALLY_REFUNDED 
+}
+
+enum PaymentMethod {
+  CASH_ON_DELIVERY 
+  CREDIT_CARD  
+  ONLINE_GATEWAY  
+  WALLET         
+  BANK_TRANSFER   
+}
+
 //! <----------------------------------------<< Moldes >>---------------------------------------->
 
 //? <----------------------- User ----------------------->
@@ -206,6 +234,8 @@ model User {
   discountUsage        DiscountUsage[]
   userDiscounts        Discount[] @relation("UserDiscounts")
   cart                 Cart[]
+  address              Address[]
+  order                Order[]
 }
 
 
@@ -465,8 +495,7 @@ model Product {
   images      ProductImage[]
   comments    Comment[]
   // bookmarks    Bookmark[]
-  // comments     Comment[]
-  // orderItems   OrderItem[]
+  orderItems   OrderItem[]
   cartItems   CartItem[]
   discountProduct   DiscountProduct[]
   // savedCardItems SavedCartItem[]
@@ -716,7 +745,7 @@ model Discount {
   categories  DiscountCategory[] 
   
   carts       Cart[]
-  // orders      Order[]
+  orders      Order[]
   usages      DiscountUsage[]
   
   createdAt   DateTime @default(now()) @map("created_at")
@@ -763,8 +792,8 @@ model DiscountUsage {
   userId      String   @map("user_id")
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  // orderId     String?  @map("order_id")
-  // order       Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId     String?  @map("order_id")
+  order       Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
   
   discountAmount Decimal @db.Decimal(10, 2) @map("discount_amount")
   
@@ -779,4 +808,147 @@ model DiscountUsage {
   @@index([userId])
   // @@index([orderId])
   @@map("discount_usages")
+}
+
+//? <----------------------- Address -----------------------> 
+model Address {
+  id          String   @id @default(cuid())
+  title       String 
+  fullname    String   @map("full_name")
+  phone       String 
+  province    String  
+  city        String 
+  address     String   @db.Text
+  postalCode  String   @map("postal_code") 
+  isDefault   Boolean  @default(false) @map("is_default")
+  
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  orders      Order[]
+  
+  createdAt   DateTime @default(now()) @map("created_at") 
+  updatedAt   DateTime @updatedAt @map("updated_at") 
+
+  @@index([userId])
+  @@index([isDefault])
+  @@map("addresses")
+  @@unique([userId, title])
+}
+
+//? <----------------------- Oreder ----------------------->
+model Order {
+  id          String   @id @default(cuid())
+  orderNumber String   @unique @map("order_number")
+  
+  subtotal        Decimal @default(0) @db.Decimal(10, 2)
+  itemDiscount    Decimal @default(0) @db.Decimal(10, 2) @map("item_discount")
+  couponDiscount  Decimal @default(0) @db.Decimal(10, 2) @map("coupon_discount")
+  totalDiscount   Decimal @default(0) @db.Decimal(10, 2) @map("total_discount")
+  tax             Decimal @default(0) @db.Decimal(10, 2)
+  shippingCost    Decimal @default(0) @db.Decimal(10, 2) @map("shipping_cost")
+  total           Decimal @db.Decimal(10, 2)
+  
+  status        OrderStatus   @default(PENDING)
+  paymentStatus PaymentStatus @default(UNPAID) @map("payment_status")
+  paymentMethod PaymentMethod? @map("payment_method")
+  
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id])
+  
+  addressId   String   @map("address_id")
+  address     Address  @relation(fields: [addressId], references: [id])
+  
+  discountId   String?   @map("discount_id")
+  discount     Discount? @relation(fields: [discountId], references: [id])
+  discountCode String?   @map("discount_code") // ✅ برای تاریخچه
+  
+  addressSnapshot Json? @map("address_snapshot")
+  
+  shippingMethod  String?  @map("shipping_method")
+  trackingCode    String?  @map("tracking_code") @unique
+  shippingCompany String?  @map("shipping_company")
+  
+  note        String? @db.Text
+  adminNote   String? @db.Text @map("admin_note")
+  
+  paidAt      DateTime? @map("paid_at")
+  shippedAt   DateTime? @map("shipped_at")
+  deliveredAt DateTime? @map("delivered_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  refundedAt  DateTime? @map("refunded_at")
+  
+  cancelReason String? @map("cancel_reason") @db.Text
+  
+  items         OrderItem[]
+  discountUsage DiscountUsage[]
+  shippingId   String?  @map("shipping_id")
+  shipping     Shipping? @relation(fields: [shippingId], references: [id])
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@index([userId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([orderNumber])
+  @@index([createdAt])
+  @@index([trackingCode])
+  @@map("orders")
+}
+
+//? <----------------------- Order Item ----------------------->
+model OrderItem {
+  id          String  @id @default(cuid())
+  
+  orderId     String  @map("order_id")
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  productId   String  @map("product_id")
+  product     Product @relation(fields: [productId], references: [id])
+  
+  // variantId   String? @map("variant_id")
+  
+  quantity    Int     @default(1)
+  price       Decimal @db.Decimal(10, 2) 
+  discount    Decimal @default(0) @db.Decimal(10, 2) 
+  total       Decimal @db.Decimal(10, 2) // (price - discount) * quantity
+  
+  productSnapshot Json? @map("product_snapshot")
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+model Shipping {
+  id          String   @id @default(cuid())
+  name        String 
+  description String?
+  code        String   @unique 
+  
+  cost        Decimal  @db.Decimal(10, 2)
+  freeAbove   Decimal? @map("free_above") 
+  minOrder    Decimal? @map("min_order") 
+  
+  estimatedDays Int    @map("estimated_days") 
+  maxWeight     Int?   @map("max_weight") 
+  
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  
+  cities      String[] @default([]) 
+  provinces   String[] @default([]) 
+  
+  orders      Order[]
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@index([code])
+  @@index([isActive])
+  @@map("shippings")
 }
