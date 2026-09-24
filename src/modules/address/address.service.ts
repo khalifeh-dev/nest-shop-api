@@ -11,6 +11,7 @@ import { ErrorUtil } from '../../common/utils/error.util';
 import type { LoggerService } from '../../common/services/logger/logger-options.interface';
 import { CreateAddressDto } from './dto/create-address.dto';
 import { UserService } from '../user/user.service';
+import { UpdateAddressDto } from './dto/update-address.dto';
 
 @Injectable()
 export class AddressService {
@@ -150,7 +151,67 @@ export class AddressService {
       if (error instanceof NotFoundException) throw error;
       const message = ErrorUtil.getMessage(error);
       this.logger.error(
-        `❌ Unexpected error in set default: ${message}`,
+        `❌ Unexpected error in set default address: ${message}`,
+        'AddressService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async update(dto: UpdateAddressDto, addressId, userId: string) {
+    try {
+      this.logger.info(`🔄️ Update user: ${userId} address`, 'AddressService');
+
+      await this.userService.secureFindOne(userId);
+      //   const existingAddress = await this.findOne(addressId, userId)
+
+      // if (dto.title !== existingAddress.title) {
+      //   const duplicateTitle = await this.prisma.replica.address.findFirst({
+      //     where: {
+      //       userId,
+      //       title: dto.title,
+      //       id: { not: addressId },
+      //     },
+      //   });
+
+      //   if (duplicateTitle) {
+      //     throw new ConflictException(
+      //       `You already have an address with title "${dto.title}".`,
+      //     );
+      //   }
+      // }
+
+      const address = await this.prisma.master.$transaction(async (tx) => {
+        if (dto.isDefault) {
+          await tx.address.updateMany({
+            where: {
+              userId,
+              id: { not: addressId },
+              isDefault: true,
+            },
+            data: { isDefault: false },
+          });
+        }
+
+        const updatedAddress = await tx.address.update({
+          where: { id: addressId },
+          data: { ...dto },
+        });
+
+        return updatedAddress;
+      });
+
+      this.logger.info(
+        `✅ Address updated successfully: ${addressId}`,
+        'AddressService',
+      );
+
+      return address;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in update address: ${message}`,
         'AddressService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
