@@ -10,8 +10,17 @@ import type { LoggerService } from '../../common/services/logger/logger-options.
 import { UserService } from '../user/user.service';
 import { DatabaseService } from '../../common/database/database.service';
 import { ErrorUtil } from '../../common/utils/error.util';
-import { CreateDiscountForUserDto } from './dto';
-import { DiscountStatus, DiscountType } from '@prisma/client';
+import {
+  CreateDiscountForAllUsersDto,
+  CreateDiscountForGroupDto,
+  CreateDiscountForUserDto,
+} from './dto';
+import {
+  DiscountStatus,
+  DiscountTargetType,
+  DiscountType,
+} from '@prisma/client';
+import { BulkValidator } from '../../common/utils/validate-bulk.util';
 
 @Injectable()
 export class DiscountService {
@@ -19,6 +28,7 @@ export class DiscountService {
     private prisma: DatabaseService,
     @Inject('LoggerService') private logger: LoggerService,
     private userService: UserService,
+    private bulkValidator: BulkValidator,
   ) {}
 
   public async createForUser(dto: CreateDiscountForUserDto) {
@@ -29,19 +39,13 @@ export class DiscountService {
       );
 
       await this.userService.secureFindOne(dto.userId);
-      await this.findOne(dto.code)
+      await this.checkUniqueCode(dto.code);
 
-      const startsAt = new Date(dto.startsAt);
-      const expiresAt = new Date(dto.expiresAt);
+      const { expiresAt, startsAt } = this.checkDate(
+        dto.startsAt,
+        dto.expiresAt,
+      );
       const now = new Date();
-
-      if (startsAt >= expiresAt) {
-        this.logger.warn(
-          `Start date must be before expiry date.`,
-          'DiscountService',
-        );
-        throw new BadRequestException('Start date must be before expiry date.');
-      }
 
       if (expiresAt < now) {
         this.logger.warn(
@@ -51,37 +55,7 @@ export class DiscountService {
         throw new BadRequestException('Expiry date must be in the future.');
       }
 
-      if (dto.type === DiscountType.PERCENTAGE && dto.value > 100) {
-        this.logger.warn(
-          `Percentage discount value cannot exceed 100.`,
-          'DiscountService',
-        );
-        throw new BadRequestException(
-          'Percentage discount value cannot exceed 100.',
-        );
-      }
-
-      if (dto.value <= 0) {
-        this.logger.warn(
-          `Discount value must be greater than 0.`,
-          'DiscountService',
-        );
-        throw new BadRequestException('Discount value must be greater than 0.');
-      }
-
-      if (
-        dto.maxAmount &&
-        dto.minOrderAmount &&
-        dto.maxAmount < dto.minOrderAmount
-      ) {
-        this.logger.warn(
-          `Max amount cannot be less than min order amount.`,
-          'DiscountService',
-        );
-        throw new BadRequestException(
-          'Max amount cannot be less than min order amount.',
-        );
-      }
+      this.checkValue(dto.type, dto.value, 100);
 
       const discount = await this.prisma.master.$transaction(async (tx) => {
         const newDiscount = await tx.discount.create({
@@ -137,14 +111,14 @@ export class DiscountService {
       }
       const message = ErrorUtil.getMessage(error);
       this.logger.error(
-        `❌ Unexpected error in create address: ${message}`,
-        'AddressService',
+        `❌ Unexpected error in create discount for a user: ${message}`,
+        'DiscountService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
 
-  public async findOne(code: string) {
+  public async checkUniqueCode(code: string) {
     try {
       this.logger.info(`🔍 Find a code: ${code}`, 'DiscountService');
 
@@ -173,10 +147,171 @@ export class DiscountService {
       }
       const message = ErrorUtil.getMessage(error);
       this.logger.error(
-        `❌ Unexpected error in find one address: ${message}`,
-        'AddressService',
+        `❌ Unexpected error in find one discount: ${message}`,
+        'DiscountService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async createForUsers(dto: CreateDiscountForAllUsersDto) {
+    try {
+      this.logger.info(`🧩 Create discount for all user`, 'DiscountService');
+
+      await this.checkUniqueCode(dto.code);
+
+      const { expiresAt, startsAt } = this.checkDate(
+        dto.startsAt,
+        dto.expiresAt,
+      );
+
+      this.checkValue(dto.type, dto.value, 100);
+
+      const discount = await this.prisma.master.discount.create({
+        data: {
+          code: dto.code,
+          title: dto.title,
+          description: dto.description,
+          type: dto.type || DiscountType.PERCENTAGE,
+          scope: dto.scope || 'ALL_PRODUCTS',
+          value: dto.value,
+          maxAmount: dto.maxAmount,
+          minOrderAmount: dto.minOrderAmount,
+          usageLimit: dto.usageLimit || 1000,
+          perUserLimit: dto.perUserLimit || 1,
+          startsAt,
+          expiresAt,
+          status: DiscountStatus.ACTIVE,
+          isFirstOrder: dto.isFirstOrder || false,
+        },
+      });
+
+      return discount;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in create discount for all users: ${message}`,
+        'DiscountService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async createForGroup(dto: CreateDiscountForGroupDto) {
+    try {
+      this.logger.info(`🧩 Create discount for group`, 'DiscountService');
+
+      await this.checkUniqueCode(dto.code);
+
+      await Promise.all([
+        this.bulkValidator.validateUsers(dto.userIds),
+        this.bulkValidator.validateProducts(dto.productIds || []),
+        this.bulkValidator.validateCategories(dto.categoryIds || []),
+      ]);
+
+      const { expiresAt, startsAt } = this.checkDate(
+        dto.startsAt,
+        dto.expiresAt,
+      );
+
+      this.checkValue(dto.type, dto.value, 100);
+
+      const discount = await this.prisma.master.discount.create({
+        data: {
+          code: dto.code,
+          title: dto.title,
+          description: dto.description,
+          type: dto.type || DiscountType.PERCENTAGE,
+          scope: 'SPECIFIC_PRODUCTS',
+          value: dto.value,
+          maxAmount: dto.maxAmount,
+          minOrderAmount: dto.minOrderAmount,
+          usageLimit: dto.usageLimit || 1,
+          perUserLimit: dto.perUserLimit || 1,
+          startsAt,
+          expiresAt,
+          status: DiscountStatus.ACTIVE,
+          targetType: dto.targetType || DiscountTargetType.USER,
+
+          users: {
+            connect: dto.userIds.map((id) => ({ id })),
+          },
+          products: {
+            create: dto.productIds?.map((id) => ({ productId: id })) || [],
+          },
+          categories: {
+            create: dto.categoryIds?.map((id) => ({ categoryId: id })) || [],
+          },
+        },
+        include: {
+          users: true,
+          products: true,
+          categories: true,
+        },
+      });
+
+      return discount;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in create discount for group: ${message}`,
+        'DiscountService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  private checkDate(startAtDate: string, expiresAtDate: string) {
+    const startsAt = new Date(startAtDate);
+    const expiresAt = new Date(expiresAtDate);
+    if (startsAt >= expiresAt || expiresAt < new Date()) {
+      this.logger.warn(
+        `Start date must be before expiry date.`,
+        'DiscountService',
+      );
+      throw new BadRequestException('Invalid date range.');
+    }
+
+    return {
+      startsAt,
+      expiresAt,
+    };
+  }
+
+  private checkValue(
+    type: DiscountType = DiscountType.PERCENTAGE,
+    value: number,
+    maxAmount?: number,
+    minOrderAmount?: number,
+  ) {
+    if (value <= 0) {
+      throw new BadRequestException('Discount value must be greater than 0.');
+    }
+
+    if (type === DiscountType.PERCENTAGE && value > 100) {
+      throw new BadRequestException(
+        'Percentage discount value cannot exceed 100.',
+      );
+    }
+
+    if (maxAmount && minOrderAmount && maxAmount < minOrderAmount) {
+      throw new BadRequestException(
+        'Max amount cannot be less than min order amount.',
+      );
     }
   }
 }
