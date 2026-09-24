@@ -106,4 +106,54 @@ export class AddressService {
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
+
+  public async setDefault(addressId: string, userId: string) {
+    try {
+      this.logger.info(
+        `⭐ Setting default address: ${addressId} for user: ${userId}`,
+        'AddressService',
+      );
+
+      const address = await this.prisma.replica.address.findFirst({
+        where: { id: addressId, userId },
+      });
+
+      if (!address) {
+        this.logger.warn(
+          `Address with ID ${addressId} not found.`,
+          'AddressService',
+        );
+        throw new NotFoundException(`Address with ID ${addressId} not found.`);
+      }
+
+      const updatedAddress = await this.prisma.master.$transaction(
+        async (tx) => {
+          await tx.address.updateMany({
+            where: { userId, isDefault: true },
+            data: { isDefault: false },
+          });
+
+          return tx.address.update({
+            where: { id: addressId },
+            data: { isDefault: true },
+          });
+        },
+      );
+
+      this.logger.info(
+        `✅ Default address changed: ${addressId}`,
+        'AddressService',
+      );
+
+      return updatedAddress;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in set default: ${message}`,
+        'AddressService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
 }

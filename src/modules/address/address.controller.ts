@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Param, Patch, Post } from '@nestjs/common';
 import { AddressService } from './address.service';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CreateAddressDto } from './dto/create-address.dto';
@@ -18,5 +18,14 @@ export class AddressController {
     @Body() dto: CreateAddressDto,
   ) {
     return this.addressService.create(dto, userId);
+  }
+
+  @Patch(':id/default')
+  @ApiOperation({ summary: 'Set address as default' })
+  public async setDefault(
+    @CurrentUser('sub') userId: string,
+    @Param('id') addressId: string,
+  ) {
+    return this.addressService.setDefault(addressId, userId);
   }
 }
