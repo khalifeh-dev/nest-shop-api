@@ -163,23 +163,23 @@ export class AddressService {
       this.logger.info(`🔄️ Update user: ${userId} address`, 'AddressService');
 
       await this.userService.secureFindOne(userId);
-      //   const existingAddress = await this.findOne(addressId, userId)
+      const existingAddress = await this.findOne(addressId, userId);
 
-      // if (dto.title !== existingAddress.title) {
-      //   const duplicateTitle = await this.prisma.replica.address.findFirst({
-      //     where: {
-      //       userId,
-      //       title: dto.title,
-      //       id: { not: addressId },
-      //     },
-      //   });
+      if (dto.title !== existingAddress?.title) {
+        const duplicateTitle = await this.prisma.replica.address.findFirst({
+          where: {
+            userId,
+            title: dto.title,
+            id: { not: addressId },
+          },
+        });
 
-      //   if (duplicateTitle) {
-      //     throw new ConflictException(
-      //       `You already have an address with title "${dto.title}".`,
-      //     );
-      //   }
-      // }
+        if (duplicateTitle) {
+          throw new ConflictException(
+            `You already have an address with title "${dto.title}".`,
+          );
+        }
+      }
 
       const address = await this.prisma.master.$transaction(async (tx) => {
         if (dto.isDefault) {
@@ -212,6 +212,28 @@ export class AddressService {
       const message = ErrorUtil.getMessage(error);
       this.logger.error(
         `❌ Unexpected error in update address: ${message}`,
+        'AddressService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async findOne(userId: string, addressId) {
+    try {
+      this.logger.info(`🔍 Find user: ${userId} address`, 'AddressService');
+
+      const address = await this.prisma.replica.address.findUnique({
+        where: { id: addressId, userId },
+      });
+
+      this.logger.info(`✅ Found user address successfuly`, 'AddressService');
+
+      return address;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in find one address: ${message}`,
         'AddressService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
