@@ -239,4 +239,88 @@ export class AddressService {
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
   }
+
+  public async remove(addressId: string, userId: string) {
+    try {
+      this.logger.info(`🪓 Remove user: ${userId} address`, 'AddressService');
+
+      await this.userService.secureFindOne(userId);
+      const existingAddress = await this.findOne(addressId, userId);
+
+      const activeOrderCount = await this.prisma.replica.order.count({
+        where: {
+          addressId,
+          status: {
+            in: ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED'],
+          },
+        },
+      });
+
+      if (activeOrderCount > 0) {
+        this.logger.warn(
+          `Cannot delete address. It is used in ${activeOrderCount} active order(s).`,
+          'AddressService',
+        );
+        throw new BadRequestException(
+          `Cannot delete address. It is used in ${activeOrderCount} active order(s).`,
+        );
+      }
+
+      const result = await this.prisma.master.$transaction(async (tx) => {
+        const deletedAddress = await tx.address.delete({
+          where: { id: addressId },
+        });
+
+        if (existingAddress?.isDefault) {
+          const anotherAddress = await tx.address.findFirst({
+            where: {
+              userId,
+              id: { not: addressId },
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+          });
+
+          if (anotherAddress) {
+            await tx.address.update({
+              where: { id: anotherAddress.id },
+              data: { isDefault: true },
+            });
+
+            this.logger.info(
+              `⭐ Set address ${anotherAddress.id} as default after deletion`,
+              'AddressService',
+            );
+          } else {
+            this.logger.warn(
+              `⚠️ No other address available for user: ${userId}`,
+              'AddressService',
+            );
+          }
+        }
+
+        return deletedAddress;
+      });
+
+      this.logger.info(
+        `✅ Address removed successfully: ${addressId}`,
+        'AddressService',
+      );
+
+      return {
+        success: true,
+        message: 'Address removed successfully.',
+        wasDefault: existingAddress?.isDefault,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in remove address: ${message}`,
+        'AddressService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
 }
