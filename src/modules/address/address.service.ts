@@ -325,67 +325,64 @@ export class AddressService {
     }
   }
 
-public async findAll(userId: string, filters?: GetAddressesDto) {
-  try {
-    this.logger.info(
-      `🔍 Finding all addresses for user: ${userId}`,
-      'AddressService',
-    );
+  public async findAll(userId: string, filters?: GetAddressesDto) {
+    try {
+      this.logger.info(
+        `🔍 Finding all addresses for user: ${userId}`,
+        'AddressService',
+      );
 
-    await this.userService.secureFindOne(userId);
+      await this.userService.secureFindOne(userId);
 
-    const where: any = { userId };
+      const where: any = { userId };
 
-    if (filters?.isDefault) {
-      where.isDefault = filters.isDefault;
+      if (filters?.isDefault) {
+        where.isDefault = filters.isDefault;
+      }
+
+      if (filters?.province) {
+        where.province = filters.province;
+      }
+
+      if (filters?.city) {
+        where.city = filters.city;
+      }
+
+      if (filters?.search) {
+        where.OR = [
+          { title: { contains: filters.search, mode: 'insensitive' } },
+          { fullname: { contains: filters.search, mode: 'insensitive' } },
+          { address: { contains: filters.search, mode: 'insensitive' } },
+        ];
+      }
+
+      const addresses = await this.prisma.replica.address.findMany({
+        where,
+        orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
+      });
+
+      const total = addresses.length;
+      const defaultAddress = addresses.find((a) => a.isDefault);
+      const hasDefault = !!defaultAddress;
+
+      return {
+        data: addresses,
+        meta: {
+          total,
+          maxAllowed: 10,
+          remaining: 10 - total,
+          hasDefault,
+          defaultAddressId: defaultAddress?.id || null,
+        },
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in find all addresses: ${message}`,
+        'AddressService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
     }
-
-    if (filters?.province) {
-      where.province = filters.province;
-    }
-
-    if (filters?.city) {
-      where.city = filters.city;
-    }
-
-    if (filters?.search) {
-      where.OR = [
-        { title: { contains: filters.search, mode: 'insensitive' } },
-        { fullname: { contains: filters.search, mode: 'insensitive' } },
-        { address: { contains: filters.search, mode: 'insensitive' } },
-      ];
-    }
-
-    const addresses = await this.prisma.replica.address.findMany({
-      where,
-      orderBy: [
-        { isDefault: 'desc' }, 
-        { createdAt: 'desc' }, 
-      ],
-    });
-
-    const total = addresses.length;
-    const defaultAddress = addresses.find((a) => a.isDefault);
-    const hasDefault = !!defaultAddress;
-
-    return {
-      data: addresses,
-      meta: {
-        total,
-        maxAllowed: 10,
-        remaining: 10 - total,
-        hasDefault,
-        defaultAddressId: defaultAddress?.id || null,
-      },
-    };
-  } catch (error) {
-    if (error instanceof NotFoundException) throw error;
-    const message = ErrorUtil.getMessage(error);
-    this.logger.error(
-      `❌ Unexpected error in find all addresses: ${message}`,
-      'AddressService',
-    );
-    throw new InternalServerErrorException('Internal Server Error ❌.');
   }
-}
 }
