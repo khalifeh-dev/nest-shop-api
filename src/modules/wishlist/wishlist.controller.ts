@@ -1,13 +1,16 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Patch,
   Post,
 } from '@nestjs/common';
 import { WishlistService } from './wishlist.service';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @Controller('wishlist')
 export class WishlistController {
@@ -15,8 +18,11 @@ export class WishlistController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  public async addToWishList() {
-    // return this.wishlistService.addToWishList()
+  public async addToWishList(
+    @CurrentUser('sub') userId: string,
+    @Param('productId') productId: string,
+  ) {
+    return this.wishlistService.addToWishList(productId, userId);
   }
 
   @Get()

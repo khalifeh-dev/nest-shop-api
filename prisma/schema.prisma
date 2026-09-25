@@ -959,10 +959,7 @@ model Shipping {
 model Wishlist {
   id          String   @id @default(cuid())
   
-  name        String   @default("علاقه‌مندی‌های من")
-  isDefault   Boolean  @default(true) @map("is_default")
-  
-  userId      String   @map("user_id")
+  userId      String   @unique @map("user_id")
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   items       WishlistItem[]
@@ -970,7 +967,6 @@ model Wishlist {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   
-  @@index([userId])
   @@map("wishlists")
 }
 
