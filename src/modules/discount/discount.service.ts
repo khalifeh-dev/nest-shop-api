@@ -279,7 +279,7 @@ export class DiscountService {
     }
   }
 
-  public async findOne(discountId: string) {
+  public async findOne(discountId: string, includeDeleted: boolean = false) {
     try {
       this.logger.info(
         `🔍 Find discount with ID: ${discountId}`,
@@ -287,7 +287,15 @@ export class DiscountService {
       );
 
       const discount = await this.prisma.replica.discount.findUnique({
-        where: { id: discountId },
+        where: {
+          id: discountId,
+          ...(includeDeleted ? {} : { isDeleted: false }),
+        },
+        include: {
+          users: true,
+          products: true,
+          categories: true,
+        },
       });
 
       if (!discount) {
@@ -300,6 +308,12 @@ export class DiscountService {
         );
       }
 
+      if (!discount.isDeleted) {
+        throw new BadRequestException(
+          `Discount with ID ${discountId} is not deleted.`,
+        );
+      }
+
       this.logger.info(
         `✅ Found discount with ID: ${discountId} successfuly`,
         'DiscountService',
@@ -307,7 +321,11 @@ export class DiscountService {
 
       return discount;
     } catch (error) {
-      if (error instanceof NotFoundException) throw error;
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
       const message = ErrorUtil.getMessage(error);
       this.logger.error(
         `❌ Unexpected error in update discount: ${message}`,
@@ -379,6 +397,90 @@ export class DiscountService {
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
+  }
+
+  public async softDelete(discountId: string) {
+    try {
+      this.logger.info(
+        `🪓 Deleting discount with ID: ${discountId}`,
+        'DiscountService',
+      );
+
+      const discount = await this.changeStatus(discountId, 'DELETE');
+
+      this.logger.info(
+        `✅ Discount removed successfully: ${discountId}`,
+        'DiscountService',
+      );
+
+      return discount;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in soft delete discount: ${message}`,
+        'DiscountService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async restore(discountId: string) {
+    try {
+      this.logger.info(
+        `🧩 Restore discount with ID: ${discountId}`,
+        'DiscountService',
+      );
+
+      const discount = await this.changeStatus(discountId, 'RESTORE');
+
+      this.logger.info(
+        `✅ Discount restored successfully: ${discountId}`,
+        'DiscountService',
+      );
+
+      return discount;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in restore discount: ${message}`,
+        'DiscountService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  private async changeStatus(
+    discountId: string,
+    operation: 'DELETE' | 'RESTORE',
+  ) {
+    await this.findOne(discountId, true);
+
+    const isDelete = operation === 'DELETE';
+
+    const discount = await this.prisma.master.discount.update({
+      where: { id: discountId },
+      data: {
+        deletedAt: isDelete ? new Date() : null,
+        isDeleted: isDelete,
+        ...(operation === 'RESTORE' && { status: DiscountStatus.ACTIVE }),
+      },
+    });
+
+    return discount;
   }
 
   private checkDate(startAtDate: string, expiresAtDate: string) {

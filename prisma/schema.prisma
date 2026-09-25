@@ -722,6 +722,9 @@ model Discount {
   
   type        DiscountType  @default(PERCENTAGE)
   scope       DiscountScope @default(ALL_PRODUCTS)
+
+  isDeleted  Boolean   @default(false) @map("is_deleted")
+  deletedAt  DateTime? @map("deleted_at")
   
   value       Decimal  @db.Decimal(10, 2)
   maxAmount   Decimal? @db.Decimal(10, 2) @map("max_amount")
