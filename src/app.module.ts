@@ -31,6 +31,7 @@ import { AddressModule } from './modules/address/address.module';
 import { OrderModule } from './modules/order/order.module';
 import { DiscountModule } from './modules/discount/discount.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
+import { WishlistModule } from './modules/wishlist/wishlist.module';
 
 @Module({
   imports: [
@@ -121,6 +122,7 @@ import { ShippingModule } from './modules/shipping/shipping.module';
     OrderModule,
     DiscountModule,
     ShippingModule,
+    WishlistModule,
   ],
   controllers: [AppController],
   providers: [

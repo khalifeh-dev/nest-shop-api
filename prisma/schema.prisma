@@ -236,6 +236,7 @@ model User {
   cart                 Cart[]
   address              Address[]
   order                Order[]
+  wishList             Wishlist[]
 }
 
 
@@ -491,12 +492,12 @@ model Product {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  categories  ProductCategory[]
-  images      ProductImage[]
-  comments    Comment[]
-  // bookmarks    Bookmark[]
-  orderItems   OrderItem[]
-  cartItems   CartItem[]
+  categories        ProductCategory[]
+  images            ProductImage[]
+  comments          Comment[]
+  wishList          WishlistItem[]
+  orderItems        OrderItem[]
+  cartItems         CartItem[]
   discountProduct   DiscountProduct[]
   // savedCardItems SavedCartItem[]
 
@@ -952,4 +953,40 @@ model Shipping {
   @@index([code])
   @@index([isActive])
   @@map("shippings")
+}
+
+
+model Wishlist {
+  id          String   @id @default(cuid())
+  
+  name        String   @default("علاقه‌مندی‌های من")
+  isDefault   Boolean  @default(true) @map("is_default")
+  
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  items       WishlistItem[]
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@index([userId])
+  @@map("wishlists")
+}
+
+model WishlistItem {
+  id          String   @id @default(cuid())
+  
+  wishlistId  String   @map("wishlist_id")
+  wishlist    Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  
+  productId   String   @map("product_id")
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  @@unique([wishlistId, productId])
+  @@index([wishlistId])
+  @@index([productId])
+  @@map("wishlist_items")
 }
