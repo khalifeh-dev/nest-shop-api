@@ -14,6 +14,7 @@ import {
   CreateDiscountForAllUsersDto,
   CreateDiscountForGroupDto,
   CreateDiscountForUserDto,
+  UpdateDiscountDto,
 } from './dto';
 import {
   DiscountStatus,
@@ -118,12 +119,15 @@ export class DiscountService {
     }
   }
 
-  public async checkUniqueCode(code: string) {
+  public async checkUniqueCode(code: string, excludeId?: string) {
     try {
       this.logger.info(`🔍 Find a code: ${code}`, 'DiscountService');
 
-      const findCode = await this.prisma.replica.discount.findUnique({
-        where: { code },
+      const findCode = await this.prisma.replica.discount.findFirst({
+        where: {
+          code,
+          ...(excludeId && { id: { not: excludeId } }),
+        },
       });
 
       if (findCode) {
@@ -269,6 +273,108 @@ export class DiscountService {
       const message = ErrorUtil.getMessage(error);
       this.logger.error(
         `❌ Unexpected error in create discount for group: ${message}`,
+        'DiscountService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async findOne(discountId: string) {
+    try {
+      this.logger.info(
+        `🔍 Find discount with ID: ${discountId}`,
+        'DiscountService',
+      );
+
+      const discount = await this.prisma.replica.discount.findUnique({
+        where: { id: discountId },
+      });
+
+      if (!discount) {
+        this.logger.warn(
+          `⛔ Discount not found with ID: ${discountId}`,
+          'DiscountService',
+        );
+        throw new NotFoundException(
+          `Discount not found with ID: ${discountId}`,
+        );
+      }
+
+      this.logger.info(
+        `✅ Found discount with ID: ${discountId} successfuly`,
+        'DiscountService',
+      );
+
+      return discount;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in update discount: ${message}`,
+        'DiscountService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async update(dto: UpdateDiscountDto, discountId: string) {
+    try {
+      this.logger.info(
+        `🔄 Updating discount with ID: ${discountId}`,
+        'DiscountService',
+      );
+
+      const existingDiscount = await this.findOne(discountId);
+
+      if (dto.code !== existingDiscount.code) {
+        await this.checkUniqueCode(dto.code, discountId);
+      }
+
+      if (dto.startsAt || dto.expiresAt) {
+        const startsAt =
+          dto.startsAt || existingDiscount.startsAt.toISOString();
+        const expiresAt =
+          dto.expiresAt || existingDiscount.expiresAt.toISOString();
+        this.checkDate(startsAt, expiresAt);
+      }
+
+      if (dto.type || dto.value) {
+        const type = dto.type || existingDiscount.type;
+        const value = dto.value ? dto.value : Number(existingDiscount.value);
+        this.checkValue(type, value, dto.maxAmount, dto.minOrderAmount);
+      }
+
+      const discount = await this.prisma.master.discount.update({
+        where: { id: discountId },
+        data: {
+          ...dto,
+          ...(dto.startsAt && { startsAt: new Date(dto.startsAt) }),
+          ...(dto.expiresAt && { expiresAt: new Date(dto.expiresAt) }),
+        },
+        include: {
+          users: true,
+          products: true,
+          categories: true,
+        },
+      });
+
+      this.logger.info(
+        `✅ Discount updated successfully: ${discountId}`,
+        'DiscountService',
+      );
+
+      return discount;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in update discount: ${message}`,
         'DiscountService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
