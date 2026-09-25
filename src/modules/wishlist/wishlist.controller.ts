@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { WishlistService } from './wishlist.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -27,8 +28,28 @@ export class WishlistController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
-  public async getWishList() {
-    // return this.wishlistService.getWishList()
+  public async getWishList(
+    @CurrentUser('sub') userId: string,
+    @Query('limit') limit: number = 20,
+    page: number = 1,
+  ) {
+    const result = await this.wishlistService.getWishList(userId, limit, page);
+
+    const { data: allData, limit: lim, page: pg, total, pages } = result;
+
+    return {
+      data: allData,
+      pagination: {
+        page: pg,
+        limit: lim,
+        total,
+        pages,
+        hasNext: pg < pages,
+        hasPrev: pg > 1,
+        nextPage: pg < pages ? pg + 1 : null,
+        prevPage: pg > 1 ? pg - 1 : null,
+      },
+    };
   }
 
   @Delete()
