@@ -15,26 +15,32 @@ import {
 import { Type, Transform } from 'class-transformer';
 import { DiscountType } from '@prisma/client';
 
+const trimString = ({ value }: { value: any }) =>
+  typeof value === 'string' ? value.trim() : value;
+
+const trimAndUpper = ({ value }: { value: any }) =>
+  typeof value === 'string' ? value.trim().toUpperCase() : value;
+
 export class CreateDiscountForUserDto {
   @ApiProperty({ example: 'SUMMER1404' })
   @IsNotEmpty()
   @IsString()
   @Length(3, 50)
-  @Transform(({ value }) => value?.trim().toUpperCase())
+  @Transform(trimString)
   code;
 
   @ApiProperty({ example: 'summar  discount' })
   @IsNotEmpty()
   @IsString()
   @Length(3, 100)
-  @Transform(({ value }) => value?.trim())
+  @Transform(trimAndUpper)
   title;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @Length(0, 500)
-  @Transform(({ value }) => value?.trim())
+  @Transform(trimAndUpper)
   description?;
 
   @ApiProperty({ enum: DiscountType, default: DiscountType.PERCENTAGE })
@@ -91,6 +97,5 @@ export class CreateDiscountForUserDto {
 
   @ApiProperty({ example: 'user-123' })
   @IsNotEmpty()
-  @IsUUID()
   userId;
 }

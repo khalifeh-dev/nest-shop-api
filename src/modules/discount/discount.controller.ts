@@ -7,16 +7,22 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { DiscountService } from './discount.service';
 import {
   CreateDiscountForAllUsersDto,
   CreateDiscountForGroupDto,
   CreateDiscountForUserDto,
+  GetDiscountsDto,
   UpdateDiscountDto,
 } from './dto';
-import { ApiOperation } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Pagination } from '../../common/types/pagination.type';
+import { Discount } from '@prisma/client';
 
+@ApiTags('Discount')
+@ApiBearerAuth()
 @Controller('discount')
 export class DiscountController {
   constructor(private readonly discountService: DiscountService) {}
@@ -64,5 +70,34 @@ export class DiscountController {
   @ApiOperation({ summary: 'Soft delete a discount' })
   public async softDelete(@Param('id') discountId: string) {
     return this.discountService.softDelete(discountId);
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Get all discounts (admin only)' })
+  public async findAll(@Query() dto: GetDiscountsDto) {
+    const result = await this.discountService.findAll(dto);
+    const {
+      data: allData,
+      limit: lim,
+      page: pg,
+      total,
+      pages,
+      ...otherData
+    } = result;
+
+    return {
+      data: allData,
+      pagination: {
+        page: pg,
+        limit: lim,
+        total,
+        pages,
+        hasNext: pg < pages,
+        hasPrev: pg > 1,
+        nextPage: pg < pages ? pg + 1 : null,
+        prevPage: pg > 1 ? pg - 1 : null,
+      },
+      otherData,
+    };
   }
 }

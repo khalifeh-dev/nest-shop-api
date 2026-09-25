@@ -14,14 +14,19 @@ import {
   CreateDiscountForAllUsersDto,
   CreateDiscountForGroupDto,
   CreateDiscountForUserDto,
+  GetDiscountsDto,
   UpdateDiscountDto,
 } from './dto';
 import {
+  Discount,
   DiscountStatus,
   DiscountTargetType,
   DiscountType,
+  Prisma,
 } from '@prisma/client';
 import { BulkValidator } from '../../common/utils/validate-bulk.util';
+import { Pagination } from '../../common/utils/pagination';
+import { FindAll } from '../../common/types/find-all.type';
 
 @Injectable()
 export class DiscountService {
@@ -57,6 +62,16 @@ export class DiscountService {
       }
 
       this.checkValue(dto.type, dto.value, 100);
+
+      if (
+        dto.usageLimit &&
+        dto.perUserLimit &&
+        dto.perUserLimit > dto.usageLimit
+      ) {
+        throw new BadRequestException(
+          'perUserLimit cannot be greater than usageLimit.',
+        );
+      }
 
       const discount = await this.prisma.master.$transaction(async (tx) => {
         const newDiscount = await tx.discount.create({
@@ -146,7 +161,10 @@ export class DiscountService {
 
       return findCode;
     } catch (error) {
-      if (error instanceof NotFoundException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException
+      ) {
         throw error;
       }
       const message = ErrorUtil.getMessage(error);
@@ -170,6 +188,16 @@ export class DiscountService {
       );
 
       this.checkValue(dto.type, dto.value, 100);
+
+      if (
+        dto.usageLimit &&
+        dto.perUserLimit &&
+        dto.perUserLimit > dto.usageLimit
+      ) {
+        throw new BadRequestException(
+          'perUserLimit cannot be greater than usageLimit.',
+        );
+      }
 
       const discount = await this.prisma.master.discount.create({
         data: {
@@ -226,6 +254,16 @@ export class DiscountService {
       );
 
       this.checkValue(dto.type, dto.value, 100);
+
+      if (
+        dto.usageLimit &&
+        dto.perUserLimit &&
+        dto.perUserLimit > dto.usageLimit
+      ) {
+        throw new BadRequestException(
+          'perUserLimit cannot be greater than usageLimit.',
+        );
+      }
 
       const discount = await this.prisma.master.discount.create({
         data: {
@@ -534,6 +572,143 @@ export class DiscountService {
       const message = ErrorUtil.getMessage(error);
       this.logger.error(
         `❌ Unexpected error in cleanup expired discount discount: ${message}`,
+        'DiscountService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async findAll(dto: GetDiscountsDto) {
+    try {
+      this.logger.info(`🔍 Find all discounts`, 'DiscountService');
+
+      const {
+        limit = 20,
+        page = 1,
+        search,
+        status,
+        type,
+        scope,
+        isFirstOrder,
+        fromDate,
+        toDate,
+        sortBy = 'createdAt',
+        sortOrder = 'desc',
+      } = dto;
+
+      const { finalLimit, skip } = Pagination.values(limit, page);
+
+      const where: Prisma.DiscountWhereInput = {
+        isDeleted: false,
+      };
+
+      if (status) where.status = status;
+      if (type) where.type = type;
+      if (scope) where.scope = scope;
+      if (isFirstOrder !== undefined) where.isFirstOrder = isFirstOrder;
+
+      if (search?.trim()) {
+        where.OR = [
+          { code: { contains: search.trim(), mode: 'insensitive' } },
+          { title: { contains: search.trim(), mode: 'insensitive' } },
+          { description: { contains: search.trim(), mode: 'insensitive' } },
+        ];
+      }
+
+      if (fromDate || toDate) {
+        where.createdAt = {};
+        if (fromDate) where.createdAt.gte = new Date(fromDate);
+        if (toDate) where.createdAt.lte = new Date(toDate);
+      }
+
+      const [discounts, total] = await Promise.all([
+        this.prisma.replica.discount.findMany({
+          where,
+          skip,
+          take: finalLimit,
+          orderBy: { [sortBy]: sortOrder },
+          include: {
+            _count: {
+              select: {
+                users: true,
+                products: true,
+                categories: true,
+                orders: true,
+                usages: true,
+              },
+            },
+          },
+        }),
+        this.prisma.replica.discount.count({ where }),
+      ]);
+
+      const totalPages = Math.ceil(total / finalLimit);
+
+      const formattedDiscounts = discounts.map((discount) => ({
+        id: discount.id,
+        code: discount.code,
+        title: discount.title,
+        description: discount.description,
+        type: discount.type,
+        scope: discount.scope,
+        value: Number(discount.value),
+        maxAmount: discount.maxAmount ? Number(discount.maxAmount) : null,
+        minOrderAmount: discount.minOrderAmount
+          ? Number(discount.minOrderAmount)
+          : null,
+        usageLimit: discount.usageLimit,
+        usedCount: discount.usedCount,
+        remainingUses: discount.usageLimit - discount.usedCount,
+        perUserLimit: discount.perUserLimit,
+        startsAt: discount.startsAt,
+        expiresAt: discount.expiresAt,
+        status: discount.status,
+        targetType: discount.targetType,
+        isFirstOrder: discount.isFirstOrder,
+        isDeleted: discount.isDeleted,
+        createdAt: discount.createdAt,
+        updatedAt: discount.updatedAt,
+        stats: {
+          usersCount: discount._count.users,
+          productsCount: discount._count.products,
+          categoriesCount: discount._count.categories,
+          ordersCount: discount._count.orders,
+          usagesCount: discount._count.usages,
+        },
+        isExpired: new Date() > discount.expiresAt,
+        isActive:
+          discount.status === 'ACTIVE' &&
+          new Date() >= discount.startsAt &&
+          new Date() <= discount.expiresAt &&
+          discount.usedCount < discount.usageLimit,
+      }));
+
+      return {
+        data: formattedDiscounts,
+        limit: finalLimit,
+        page,
+        total,
+        pages: totalPages,
+        meta: {
+          totalActive: await this.prisma.replica.discount.count({
+            where: { ...where, status: 'ACTIVE' },
+          }),
+          totalExpired: await this.prisma.replica.discount.count({
+            where: { ...where, expiresAt: { lt: new Date() } },
+          }),
+        },
+      };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in restore discount: ${message}`,
         'DiscountService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');
