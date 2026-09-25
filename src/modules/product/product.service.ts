@@ -262,7 +262,8 @@ export class ProductService {
   public async findOne(
     id: string,
     options?: Omit<Prisma.ProductFindUniqueArgs, 'where'>,
-  ): Promise<Product> {
+    userId?: string,
+  ) {
     try {
       const findProduct = await this.prisma.replica.product.findUnique({
         where: { id },
@@ -278,7 +279,22 @@ export class ProductService {
       if (!findProduct.isActive)
         throw new BadRequestException('Product is not active');
 
-      return findProduct;
+      let isWishlisted = false;
+      if (userId) {
+        const wishlistItem = await this.prisma.replica.wishlistItem.findFirst({
+          where: {
+            productId: id,
+            wishlist: { userId },
+          },
+          select: { id: true },
+        });
+        isWishlisted = !!wishlistItem;
+      }
+
+      return {
+        ...findProduct,
+        isWishlisted,
+      };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       const message = ErrorUtil.getMessage(error);

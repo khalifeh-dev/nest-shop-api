@@ -28,12 +28,16 @@ export class WishlistController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
-  public async getWishList(
+  public async getAllWishList(
     @CurrentUser('sub') userId: string,
     @Query('limit') limit: number = 20,
-    page: number = 1,
+    @Query('page') page: number = 1,
   ) {
-    const result = await this.wishlistService.getWishList(userId, limit, page);
+    const result = await this.wishlistService.getAllWishList(
+      userId,
+      limit,
+      page,
+    );
 
     const { data: allData, limit: lim, page: pg, total, pages } = result;
 
@@ -52,27 +56,18 @@ export class WishlistController {
     };
   }
 
-  @Delete()
+  @Delete(':productId')
   @HttpCode(HttpStatus.OK)
-  public async removeFromWishList() {
-    // return this.wishlistService.removeFromWishList()
+  public async removeFromWishList(
+    @CurrentUser('sub') userId: string,
+    @Param('productId') productId: string,
+  ) {
+    return this.wishlistService.removeFromWishList(userId, productId)
   }
 
   @Delete()
   @HttpCode(HttpStatus.OK)
   public async clearWishList() {
     // return this.wishlistService.clearWishList()
-  }
-
-  @Get()
-  @HttpCode(HttpStatus.OK)
-  public async checkInWishList() {
-    // return this.wishlistService.checkInWishList()
-  }
-
-  @Patch()
-  @HttpCode(HttpStatus.OK)
-  public async updateWishList() {
-    // return this.wishlistService.updateWishList()
   }
 }

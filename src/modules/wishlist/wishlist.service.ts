@@ -63,7 +63,11 @@ export class WishlistService {
     }
   }
 
-  public async getWishList(userId: string, limit: number = 20, page: number = 1) {
+  public async getAllWishList(
+    userId: string,
+    limit: number = 20,
+    page: number = 1,
+  ) {
     try {
       await this.userService.secureFindOne(userId);
 
@@ -108,6 +112,48 @@ export class WishlistService {
         total,
         pages: totalPages,
       };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async removeFromWishList(userId: string, productId: string) {
+    try {
+      await Promise.all([
+        this.userService.secureFindOne(userId),
+        this.productService.findOne(productId),
+      ]);
+
+      const wishlist = await this.prisma.replica.wishlist.findUnique({
+        where: { userId },
+      });
+
+      if (!wishlist) throw new NotFoundException('Wishlist not found.');
+
+      const item = await this.prisma.replica.wishlistItem.findUnique({
+        where: {
+          wishlistId_productId: {
+            wishlistId: wishlist.id,
+            productId,
+          },
+        },
+      });
+
+      if (!item)
+        throw new NotFoundException('Product not found in your wishlist.');
+
+      await this.prisma.master.wishlistItem.delete({
+        where: { id: item.id },
+      });
+
+      return { success: true, message: 'Product removed from wishlist.' };
     } catch (error) {
       if (
         error instanceof NotFoundException ||
