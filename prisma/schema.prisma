@@ -657,15 +657,13 @@ model Cart {
   user        User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   status      CartStatus  @default(ACTIVE)
-  
   subtotal    Decimal     @default(0) @db.Decimal(10, 2)
   discount    Decimal     @default(0) @db.Decimal(10, 2)
   total       Decimal     @default(0) @db.Decimal(10, 2)
-  
   guestToken  String?     @unique @map("guest_token") 
 
-  discountId  String?     @map("discount_id")
-  discountRef Discount?   @relation(fields: [discountId], references: [id])
+  discountId  String?   @map("discount_id")
+  discountRef Discount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
   
   itemCount   Int         @default(0) @map("item_count")
   note        String?     @db.Text
@@ -673,7 +671,7 @@ model Cart {
   expiresAt   DateTime?   @map("expires_at")
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
-  
+
   items       CartItem[]
   
   @@index([userId])
@@ -862,9 +860,9 @@ model Order {
   addressId   String   @map("address_id")
   address     Address  @relation(fields: [addressId], references: [id])
   
-  discountId   String?   @map("discount_id")
-  discount     Discount? @relation(fields: [discountId], references: [id])
-  discountCode String?   @map("discount_code") // ✅ برای تاریخچه
+  discountId  String?   @map("discount_id")
+  discount    Discount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
+  discountCode String?   @map("discount_code") 
   
   addressSnapshot Json? @map("address_snapshot")
   

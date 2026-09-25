@@ -308,11 +308,13 @@ export class DiscountService {
         );
       }
 
-      if (!discount.isDeleted) {
+      if (!discount.isDeleted)
         throw new BadRequestException(
           `Discount with ID ${discountId} is not deleted.`,
         );
-      }
+
+      if (new Date() > discount.expiresAt)
+        throw new BadRequestException('Discount has expired.');
 
       this.logger.info(
         `✅ Found discount with ID: ${discountId} successfuly`,
@@ -457,6 +459,81 @@ export class DiscountService {
       const message = ErrorUtil.getMessage(error);
       this.logger.error(
         `❌ Unexpected error in restore discount: ${message}`,
+        'DiscountService',
+      );
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  public async cleanupExpiredDiscounts(
+    olderThanDays: number = 30,
+  ): Promise<{ deletedCount: number }> {
+    try {
+      this.logger.info(
+        `🧹 Starting cleanup of discounts expired more than ${olderThanDays} days ago...`,
+      );
+
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
+
+      const expiredDiscounts = await this.prisma.replica.discount.findMany({
+        where: {
+          expiresAt: { lt: cutoffDate },
+          orders: { none: {} },
+          carts: {
+            none: {
+              status: 'ACTIVE',
+            },
+          },
+        },
+        select: {
+          id: true,
+          code: true,
+          expiresAt: true,
+        },
+      });
+
+      if (expiredDiscounts.length === 0) {
+        this.logger.info('✅ No expired discounts found to clean up.');
+        return { deletedCount: 0 };
+      }
+
+      const discountIds = expiredDiscounts.map((d) => d.id);
+      this.logger.info(
+        `🔍 Found ${discountIds.length} expired discounts to delete.`,
+      );
+
+      await this.prisma.master.$transaction(async (tx) => {
+        await tx.discountUsage.deleteMany({
+          where: { discountId: { in: discountIds } },
+        });
+
+        await tx.discount.deleteMany({
+          where: { id: { in: discountIds } },
+        });
+
+        await tx.discountProduct.deleteMany({
+          where: { discountId: { in: discountIds } },
+        });
+
+        await tx.discountCategory.deleteMany({
+          where: { discountId: { in: discountIds } },
+        });
+
+        await tx.discount.deleteMany({
+          where: { id: { in: discountIds } },
+        });
+      });
+
+      this.logger.info(
+        `✅ Cleanup completed: ${discountIds.length} expired discounts permanently deleted.`,
+      );
+
+      return { deletedCount: discountIds.length };
+    } catch (error) {
+      const message = ErrorUtil.getMessage(error);
+      this.logger.error(
+        `❌ Unexpected error in cleanup expired discount discount: ${message}`,
         'DiscountService',
       );
       throw new InternalServerErrorException('Internal Server Error ❌.');

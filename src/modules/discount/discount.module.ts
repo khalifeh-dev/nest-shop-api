@@ -7,9 +7,9 @@ import { ProductModule } from '../product/product.module';
 import { BulkValidator } from '../../common/utils/validate-bulk.util';
 
 @Module({
-  imports: [UserModule,     ProductModule,
-    CategoryModule,],
+  imports: [UserModule, ProductModule, CategoryModule],
   controllers: [DiscountController],
   providers: [DiscountService, BulkValidator],
+  exports: [DiscountService],
 })
 export class DiscountModule {}
