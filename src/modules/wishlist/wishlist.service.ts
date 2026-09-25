@@ -10,6 +10,7 @@ import { ErrorUtil } from '../../common/utils/error.util';
 import { UserService } from '../user/user.service';
 import { ProductService } from '../product/product.service';
 import { Pagination } from '../../common/utils/pagination';
+import { Wishlist } from '@prisma/client';
 
 @Injectable()
 export class WishlistService {
@@ -54,8 +55,7 @@ export class WishlistService {
     } catch (error) {
       if (
         error instanceof NotFoundException ||
-        error instanceof BadRequestException ||
-        error instanceof ConflictException
+        error instanceof BadRequestException
       ) {
         throw error;
       }
@@ -115,8 +115,7 @@ export class WishlistService {
     } catch (error) {
       if (
         error instanceof NotFoundException ||
-        error instanceof BadRequestException ||
-        error instanceof ConflictException
+        error instanceof BadRequestException
       ) {
         throw error;
       }
@@ -131,11 +130,7 @@ export class WishlistService {
         this.productService.findOne(productId),
       ]);
 
-      const wishlist = await this.prisma.replica.wishlist.findUnique({
-        where: { userId },
-      });
-
-      if (!wishlist) throw new NotFoundException('Wishlist not found.');
+      const wishlist = await this.findOne(userId);
 
       const item = await this.prisma.replica.wishlistItem.findUnique({
         where: {
@@ -155,14 +150,42 @@ export class WishlistService {
 
       return { success: true, message: 'Product removed from wishlist.' };
     } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof BadRequestException ||
-        error instanceof ConflictException
-      ) {
-        throw error;
-      }
+      if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException('Internal Server Error ❌.');
     }
+  }
+
+  public async clearWishList(userId: string) {
+    try {
+      await this.userService.secureFindOne(userId);
+
+      const wishlist = await this.findOne(userId);
+
+      const result = await this.prisma.master.wishlistItem.deleteMany({
+        where: { wishlistId: wishlist.id },
+      });
+
+      return {
+        deletedCount: result.count,
+        message: `${result.count} items removed from your wishlist.`,
+      };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
+      throw new InternalServerErrorException('Internal Server Error ❌.');
+    }
+  }
+
+  private async findOne(userId: string) {
+    const wishlist = await this.prisma.replica.wishlist.findUnique({
+      where: { userId },
+    });
+
+    if (!wishlist) throw new BadRequestException('Wishlist is already empty.');
+
+    return wishlist;
   }
 }

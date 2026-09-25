@@ -67,7 +67,7 @@ export class WishlistController {
 
   @Delete()
   @HttpCode(HttpStatus.OK)
-  public async clearWishList() {
-    // return this.wishlistService.clearWishList()
+  public async clearWishList(@CurrentUser('sub') userId: string) {
+    return this.wishlistService.clearWishList(userId)
   }
 }
