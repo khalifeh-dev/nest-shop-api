@@ -174,6 +174,7 @@ export class ProductService {
 
       return product;
     } catch (error) {
+      if (error instanceof NotFoundException) throw error
       const message = ErrorUtil.getMessage(error);
       this.logger.error(
         `⛔ Error in create product: ${message}`,

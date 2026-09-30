@@ -187,6 +187,25 @@ enum PaymentMethod {
   BANK_TRANSFER   
 }
 
+enum ShippingProvider {
+  INTERNAL 
+  TIPAX    
+  POST     
+  PEYK     
+}
+
+enum ShipmentStatus {
+  PENDING     
+  CONFIRMED   
+  PICKED_UP   
+  IN_TRANSIT  
+  OUT_FOR_DELIVERY 
+  DELIVERED  
+  FAILED     
+  RETURNED   
+  CANCELLED  
+}
+
 //! <----------------------------------------<< Moldes >>---------------------------------------->
 
 //? <----------------------- User ----------------------->
@@ -884,9 +903,10 @@ model Order {
   
   items         OrderItem[]
   discountUsage DiscountUsage[]
+  shipments   Shipment[]
   shippingId   String?  @map("shipping_id")
   shipping     Shipping? @relation(fields: [shippingId], references: [id])
-  
+
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   
@@ -928,31 +948,72 @@ model OrderItem {
 
 model Shipping {
   id          String   @id @default(cuid())
+  
   name        String 
-  description String?
-  code        String   @unique 
+  code        String   @unique // "POST", "TIPAX", "PEYK"
+  description String?  @db.Text
   
-  cost        Decimal  @db.Decimal(10, 2)
-  freeAbove   Decimal? @map("free_above") 
-  minOrder    Decimal? @map("min_order") 
+  provider    ShippingProvider @default(INTERNAL) 
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
   
-  estimatedDays Int    @map("estimated_days") 
-  maxWeight     Int?   @map("max_weight") 
+  cost        Decimal? @db.Decimal(10, 2)
+  freeAbove   Decimal? @db.Decimal(10, 2) @map("free_above")
+  minOrder    Decimal? @db.Decimal(10, 2) @map("min_order")
   
-  isActive    Boolean  @default(true) @map("is_active")
-  sortOrder   Int      @default(0) @map("sort_order")
+  estimatedDays Int    @default(3) @map("estimated_days")
+  maxWeight     Int?   @map("max_weight")
   
-  cities      String[] @default([]) 
-  provinces   String[] @default([]) 
+  apiKey      String?  @map("api_key")
+  apiSecret   String?  @map("api_secret")
+  apiEndpoint String?  @map("api_endpoint")
+  
+  config      Json?    @default("{}")
   
   orders      Order[]
+  shipments   Shipment[] 
   
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   
   @@index([code])
+  @@index([provider])
   @@index([isActive])
   @@map("shippings")
+}
+
+model Shipment {
+  id          String   @id @default(cuid())
+  
+  orderId     String   @map("order_id")
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  shippingId  String   @map("shipping_id")
+  shipping    Shipping @relation(fields: [shippingId], references: [id])
+  
+  trackingCode String? @unique @map("tracking_code") 
+  status      ShipmentStatus @default(PENDING)
+  
+  weight      Decimal?
+  cost        Decimal  @db.Decimal(10, 2)
+  
+  senderInfo      Json? @map("sender_info")
+  receiverInfo    Json? @map("receiver_info")
+  
+  shippedAt       DateTime? @map("shipped_at")
+  deliveredAt     DateTime? @map("delivered_at")
+  cancelledAt     DateTime? @map("cancelled_at")
+  
+  providerResponse Json? @map("provider_response")
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@index([orderId])
+  @@index([shippingId])
+  @@index([trackingCode])
+  @@index([status])
+  @@map("shipments")
 }
 
 

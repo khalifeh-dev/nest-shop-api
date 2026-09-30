@@ -13,6 +13,7 @@ import { CartStatus, Prisma } from '@prisma/client';
 import { ProductService } from '../product/product.service';
 import { AddItemDto } from './dto/add-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
+import { DiscountService } from '../discount/discount.service';
 
 type IncludeCartItem = Prisma.CartItemInclude;
 type CartInclude = Prisma.CartInclude;
@@ -23,7 +24,7 @@ export class CartService {
     private prisma: DatabaseService,
     private userService: UserService,
     private productService: ProductService,
-    // private discountService: DiscountService,
+    private discountService: DiscountService,
     @Inject('LoggerService') private logger: LoggerService,
   ) {}
 
@@ -212,7 +213,7 @@ export class CartService {
         throw new BadRequestException('Product is not active.');
       }
 
-      if (dto.quantity !== undefined) {
+      if (dto.quantity) {
         if (dto.quantity < 1) {
           throw new BadRequestException('Quantity must be at least 1.');
         }
@@ -224,7 +225,7 @@ export class CartService {
         }
       }
 
-      const updatedCart = await this.prisma.master.$transaction(async (tx) => {
+      const updatedCart = await this.prisma.transaction(async (tx) => {
         const updateData: any = {};
 
         if (dto.quantity) {

@@ -170,7 +170,7 @@ export class UserController {
   @Patch('account/:id/soft_delete')
   @ApiOperation({ summary: 'Soft Delete user status by user' })
   @HttpCode(HttpStatus.OK)
-  public async softDeleteByUser(@Param('userId') userId: string) {
+  public async softDeleteByUser(@Param('id') userId: string) {
     const result = await this.userService.softDelete(
       userId,
       AccountAction.USER_DELETE_REASON,

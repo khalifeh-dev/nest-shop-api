@@ -32,7 +32,7 @@ import type {
 export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
-  @Post(':userId')
+  @Post()
   @ApiOperation({ summary: 'Create a Category' })
   @HttpCode(HttpStatus.CREATED)
   public async create(@Body() dto: CreateCategoryDto): Promise<Category> {
